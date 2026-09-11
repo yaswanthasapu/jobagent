@@ -149,14 +149,14 @@ class ResumeService:
             doc = SimpleDocTemplate(str(self.resume_path), pagesize=letter, leftMargin=40, rightMargin=40, topMargin=40, bottomMargin=40)
             styles = getSampleStyleSheet()
 
-            name = profile.personal.full_name if profile else "Yaswanth Asapu"
-            title = profile.professional.designation if profile else "QA Automation Engineer"
-            email = profile.personal.email or "yaswanth.qa@example.com"
-            phone = profile.personal.phone or "+91-9876543210"
-            location = profile.personal.location if profile else "Hyderabad, Telangana, India"
-            exp = profile.professional.total_experience_years if profile else 4
-            company = profile.professional.current_company if profile else "Magellanic-Cloud"
-            skills_str = ", ".join(profile.skills) if profile else "Selenium, Playwright, Java, TestNG, RestAssured"
+            name = profile.personal.full_name if (profile and profile.personal.full_name) else "Candidate Name"
+            title = profile.professional.designation if (profile and profile.professional.designation) else "Software Professional"
+            email = (profile.personal.email if profile and profile.personal.email else "candidate@example.com")
+            phone = (profile.personal.phone if profile and profile.personal.phone else "9876543210")
+            location = (profile.personal.location if profile and profile.personal.location else "India")
+            exp = profile.professional.total_experience_years if (profile and profile.professional.total_experience_years) else 1.0
+            company = (profile.professional.current_company if profile and profile.professional.current_company else "Previous Company")
+            skills_str = ", ".join(profile.skills) if (profile and profile.skills) else "Python, Java, SQL, Git"
 
             story = []
 

@@ -532,11 +532,11 @@ class ChatAgent:
         # Resolve parameters with defaults
         target_role = (
             search_params.get("keyword")
-            or (profile.preferred_roles[0] if profile and profile.preferred_roles else "QA Automation Engineer")
+            or (profile.preferred_roles[0] if profile and profile.preferred_roles else "Software Engineer")
         )
         target_location = (
             search_params.get("location")
-            or (profile.preferred_locations[0] if profile and profile.preferred_locations else "Hyderabad")
+            or (profile.preferred_locations[0] if profile and profile.preferred_locations else "Remote")
         )
         target_platform = search_params.get("platform") or "all"
         target_date_filter = search_params.get("date_posted") or prefs.get("default_date_filter", "24h")
@@ -644,7 +644,7 @@ class ChatAgent:
                 self.console.print("\n[bold purple]Agent[/bold purple]: You are currently in Chat Mode! Ask me anything, update your profile, or tell me which jobs to apply for.\n")
                 continue
             if msg_lower == "2":
-                self.console.print("\n[bold purple]Agent[/bold purple]: Tell me what role and location you'd like to apply for (e.g. 'Apply for QA Automation Engineer jobs in Hyderabad on LinkedIn').\n")
+                self.console.print("\n[bold purple]Agent[/bold purple]: Tell me what role and location you'd like to apply for (e.g. 'Apply for Software Engineer jobs in Remote on LinkedIn').\n")
                 continue
             if msg_lower == "3" or msg_lower in ["/applied", "/jobs", "applied"]:
                 from services.db_service import DatabaseService

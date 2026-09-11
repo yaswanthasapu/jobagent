@@ -22,11 +22,11 @@ def test_resume_reviewer_extract_text():
 
 def test_resume_reviewer_heuristic_review(reviewer: ResumeReviewer, profile: CandidateProfile):
     sample_text = """
-    Yaswanth Asapu
+    Alex Taylor
     QA Automation Engineer
-    Phone: 6281306458
+    Phone: 9876543210
     Skills: Selenium, Playwright, Java, TestNG
-    Experience: 4 years working at Magellanic-Cloud.
+    Experience: 4 years working at Tech Innovations.
     """
     review = reviewer._heuristic_review(sample_text, profile)
     

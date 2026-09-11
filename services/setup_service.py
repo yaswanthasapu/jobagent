@@ -119,6 +119,19 @@ class SetupService:
         has_profile = PROFILE_PATH.exists()
         has_resume = RESUME_PATH.exists()
         has_api_key = bool(runtime_api_key or settings.GEMINI_API_KEY or settings.OPENAI_API_KEY or self._get_env_key("GEMINI_API_KEY") or self._get_env_key("OPENAI_API_KEY"))
+
+        if has_profile:
+            try:
+                with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                    name = data.get("name") or (data.get("personal", {}).get("full_name") if isinstance(data.get("personal"), dict) else "")
+                    skills = data.get("skills", [])
+                    # Profile is only considered complete if candidate name and skills are actually populated
+                    if not name or not str(name).strip() or not skills:
+                        has_profile = False
+            except Exception:
+                has_profile = False
+
         if allow_offline:
             return has_profile and has_resume
         return has_profile and has_resume and has_api_key
@@ -270,7 +283,7 @@ Return ONLY a strictly valid JSON object with schema:
 {{
   "full_name": "Full Name of candidate",
   "email": "Email address",
-  "phone": "Clean 10-digit mobile phone number (digits only, e.g. 6281306458)",
+  "phone": "Clean 10-digit mobile phone number (digits only, e.g. 9876543210)",
   "location": "City, State, Country",
   "designation": "Current or most recent Job Title / Role",
   "current_company": "Current or most recent Employer / Company Name",
@@ -688,8 +701,42 @@ Return ONLY a strictly valid JSON object with schema:
             border_style="cyan"
         ))
 
-        # 1. CTC
-        self.console.print("\n[bold yellow]1. Compensation (CTC)[/bold yellow]")
+        # 1. Personal Information
+        self.console.print("\n[bold yellow]1. Personal Information[/bold yellow]")
+        name = Prompt.ask("Full Name", default=profile.personal.full_name or profile.name or "")
+        email = Prompt.ask("Email Address", default=profile.personal.email or "")
+        phone = Prompt.ask("Mobile Phone (10 digits)", default=profile.personal.phone or "")
+        location = Prompt.ask("Location (City, State, Country)", default=profile.personal.location or "")
+
+        clean_p = re.sub(r'\D', '', phone)
+        if clean_p.startswith('91') and len(clean_p) == 12:
+            clean_p = clean_p[2:]
+        phone = clean_p
+
+        profile.personal.full_name = name
+        profile.personal.email = email
+        profile.personal.phone = phone
+        profile.personal.location = location
+        profile.name = name
+
+        # 2. Professional Details
+        self.console.print("\n[bold yellow]2. Professional Details[/bold yellow]")
+        designation = Prompt.ask("Current Designation / Role", default=profile.professional.designation or profile.current_role or "")
+        company = Prompt.ask("Current Employer", default=profile.professional.current_company or "")
+        default_exp = str(profile.professional.total_experience_years or profile.experience_years or 1.0)
+        try:
+            exp_years = float(Prompt.ask("Total Experience in Years", default=default_exp))
+        except Exception:
+            exp_years = float(default_exp)
+
+        profile.professional.designation = designation
+        profile.professional.current_company = company
+        profile.professional.total_experience_years = exp_years
+        profile.current_role = designation
+        profile.experience_years = exp_years
+
+        # 3. CTC
+        self.console.print("\n[bold yellow]3. Compensation (CTC)[/bold yellow]")
         curr_ctc_default = str(prefs.get("current_ctc_inr", int(profile.professional.current_lpa * 100000)))
         exp_ctc_default = str(prefs.get("expected_ctc_inr", int(profile.professional.expected_lpa * 100000)))
         
@@ -704,32 +751,38 @@ Return ONLY a strictly valid JSON object with schema:
         except Exception:
             exp_ctc_inr = int(exp_ctc_default)
 
-        profile.professional.current_lpa = round(cur_ctc_inr / 100000, 2)
-        profile.professional.expected_lpa = round(exp_ctc_inr / 100000, 2)
+        cur_lpa = round(cur_ctc_inr / 100000, 2)
+        exp_lpa = round(exp_ctc_inr / 100000, 2)
+        profile.professional.current_lpa = cur_lpa
+        profile.professional.expected_lpa = exp_lpa
+        profile.current_ctc_lpa = cur_lpa
+        profile.expected_ctc_lpa = exp_lpa
         self.memory_service.set_preference("current_ctc_inr", cur_ctc_inr)
         self.memory_service.set_preference("expected_ctc_inr", exp_ctc_inr)
 
-        # 2. Notice Period
-        self.console.print("\n[bold yellow]2. Notice Period[/bold yellow]")
-        notice_default = str(profile.professional.notice_period_days)
+        # 4. Notice Period
+        self.console.print("\n[bold yellow]4. Notice Period[/bold yellow]")
+        notice_default = str(profile.professional.notice_period_days or 30)
         notice_days = int(Prompt.ask("Notice Period in Calendar Days", default=notice_default))
         profile.professional.notice_period_days = notice_days
+        profile.notice_period_days = notice_days
         self.memory_service.set_preference("notice_period_days", notice_days)
 
-        # 3. Target Roles
-        self.console.print("\n[bold yellow]3. Target Job Roles (Universal)[/bold yellow]")
-        roles_default = ", ".join(profile.preferred_roles)
+        # 5. Target Roles
+        self.console.print("\n[bold yellow]5. Target Job Roles (Universal)[/bold yellow]")
+        roles_default = ", ".join(profile.preferred_roles or profile.target_roles or [])
         roles_raw = Prompt.ask("Target Job Roles (comma separated)", default=roles_default)
         profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
+        profile.target_roles = list(profile.preferred_roles)
 
-        # 4. Preferred Locations
-        self.console.print("\n[bold yellow]4. Preferred Job Locations[/bold yellow]")
+        # 6. Preferred Locations
+        self.console.print("\n[bold yellow]6. Preferred Job Locations[/bold yellow]")
         loc_default = ", ".join(profile.preferred_locations)
         loc_raw = Prompt.ask("Preferred Locations (comma separated)", default=loc_default)
         profile.preferred_locations = [l.strip() for l in loc_raw.split(",") if l.strip()]
 
-        # 5. Target Platforms
-        self.console.print("\n[bold yellow]5. Target Platforms[/bold yellow]")
+        # 7. Target Platforms
+        self.console.print("\n[bold yellow]7. Target Platforms[/bold yellow]")
         curr_plat = "all" if len(prefs.get("preferred_platforms", [])) > 1 else (prefs.get("preferred_platforms", ["all"])[0] if prefs.get("preferred_platforms") else "all")
         plat_choice = Prompt.ask(
             "Select Platforms to Apply",
@@ -739,13 +792,14 @@ Return ONLY a strictly valid JSON object with schema:
         platforms = ["linkedin", "naukri"] if plat_choice == "all" else [plat_choice]
         self.memory_service.set_preference("preferred_platforms", platforms)
 
-        # 6. Technical Skills
-        self.console.print("\n[bold yellow]6. Core Technical Skills[/bold yellow]")
+        # 8. Technical Skills
+        self.console.print("\n[bold yellow]8. Core Technical Skills[/bold yellow]")
         skills_default = ", ".join(profile.skills)
         skills_raw = Prompt.ask("Skills (comma separated)", default=skills_default)
         profile.skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
 
         # Save to disk
+        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(PROFILE_PATH, "w", encoding="utf-8") as f:
             f.write(profile.model_dump_json(indent=2))
 
@@ -753,7 +807,7 @@ Return ONLY a strictly valid JSON object with schema:
         ProfileLoader.reset()
 
         self.memory_service.add_conversation_note(
-            f"User updated profile details: Target Roles: {', '.join(profile.preferred_roles)}; "
+            f"User updated profile details for {name} ({designation}): Target Roles: {', '.join(profile.preferred_roles)}; "
             f"CTC: INR {cur_ctc_inr:,} -> INR {exp_ctc_inr:,}; Notice: {notice_days} days."
         )
 

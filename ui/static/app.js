@@ -101,8 +101,14 @@ async function loadDashboardStatus() {
         if (!res.ok) return;
         const data = await res.json();
         
-        document.getElementById("candidate-display-name").textContent = data.candidate_name || "Yaswanth Asapu";
-        document.getElementById("candidate-display-role").textContent = data.designation || "QA Automation Engineer";
+        const candName = data.candidate_name || "Candidate";
+        document.getElementById("candidate-display-name").textContent = candName;
+        document.getElementById("candidate-display-role").textContent = data.designation || "Software Professional";
+        const avatarEl = document.getElementById("candidate-avatar");
+        if (avatarEl && candName) {
+            const initials = candName.split(" ").filter(Boolean).map(n => n[0].toUpperCase()).slice(0, 2).join("");
+            avatarEl.textContent = initials || "JA";
+        }
         document.getElementById("metric-applied-count").textContent = data.total_applied_jobs || "0";
         document.getElementById("metric-skills-count").textContent = data.skills_count || "0";
         document.getElementById("metric-answers-count").textContent = data.saved_answers_count || "0";

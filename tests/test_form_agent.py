@@ -409,12 +409,12 @@ async def test_form_agent_new_freetext_field_triggers_hitl(form_agent: FormAgent
     assert needs_hitl is True
 
     # Save human answer
-    form_agent.memory_service.save_form_answer("Who referred you to this position?", "Employee Referral - Yaswanth", "text")
+    form_agent.memory_service.save_form_answer("Who referred you to this position?", "Employee Referral - Alex Smith", "text")
 
     # Verify remembered
     resolved_val, needs_hitl2 = await form_agent.resolve_field_value(custom_field, profile)
     assert needs_hitl2 is False
-    assert "Yaswanth" in resolved_val
+    assert "Alex Smith" in resolved_val
 
 
 @pytest.mark.asyncio

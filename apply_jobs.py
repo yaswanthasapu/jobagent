@@ -987,8 +987,8 @@ async def run_simple_agent(
     prefs = memory_service.get_all_preferences()
 
     # Determine runtime parameters (CLI args override saved preferences)
-    target_keyword = keyword or (profile.preferred_roles[0] if profile.preferred_roles else "QA Automation Engineer")
-    target_location = location or (profile.preferred_locations[0] if profile.preferred_locations else "Hyderabad")
+    target_keyword = keyword or (profile.preferred_roles[0] if profile.preferred_roles else "Software Engineer")
+    target_location = location or (profile.preferred_locations[0] if profile.preferred_locations else "Remote")
     effective_platform = platform or ("all" if len(prefs.get("preferred_platforms", [])) > 1 else prefs.get("preferred_platforms", ["all"])[0])
     effective_date_filter = date_posted or prefs.get("default_date_filter", "24h")
     effective_min_score = min_score if min_score > 0 else (profile.job_preferences.minimum_match_score or 60.0)

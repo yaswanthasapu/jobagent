@@ -89,8 +89,8 @@ async def interactive_menu(console: Console, setup_service: SetupService, memory
             memory_service.seed_from_profile(cand_profile)
 
             # Load previously used settings so user never starts with empty inputs
-            default_role = prefs.get("last_target_role") or (cand_profile.preferred_roles[0] if (cand_profile and cand_profile.preferred_roles) else "QA Automation Engineer")
-            default_loc = prefs.get("last_target_location") or (cand_profile.preferred_locations[0] if (cand_profile and cand_profile.preferred_locations) else "Hyderabad")
+            default_role = prefs.get("last_target_role") or (cand_profile.preferred_roles[0] if (cand_profile and cand_profile.preferred_roles) else "Software Engineer")
+            default_loc = prefs.get("last_target_location") or (cand_profile.preferred_locations[0] if (cand_profile and cand_profile.preferred_locations) else "Remote")
             default_plat = prefs.get("last_platform") or ("all" if len(prefs.get("preferred_platforms", [])) > 1 else prefs.get("preferred_platforms", ["all"])[0])
             default_date = prefs.get("last_date_filter") or prefs.get("default_date_filter", "24h")
             default_remote = prefs.get("last_remote_only", False)

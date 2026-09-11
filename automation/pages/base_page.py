@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import os
 from pathlib import Path
 from typing import Optional
 from playwright.async_api import Page, Locator, TimeoutError as PlaywrightTimeoutError
@@ -77,13 +78,15 @@ class BasePage:
         await self.page.screenshot(path=str(file_path), full_page=False)
 
         # Also copy to artifact directory if available for markdown embedding
-        artifact_dir = Path(r"C:\Users\Yaswanth\.gemini\antigravity\brain\d0995ffe-f6c6-4d4a-8318-05b0c83f3f62")
-        if artifact_dir.exists():
-            try:
-                import shutil
-                shutil.copy(file_path, artifact_dir / f"{name}.png")
-            except Exception:
-                pass
+        artifact_env = os.getenv("ANTIGRAVITY_ARTIFACT_DIR")
+        if artifact_env:
+            artifact_dir = Path(artifact_env)
+            if artifact_dir.exists():
+                try:
+                    import shutil
+                    shutil.copy(file_path, artifact_dir / f"{name}.png")
+                except Exception:
+                    pass
 
         return str(file_path.resolve())
 

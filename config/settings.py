@@ -61,8 +61,8 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.1
 
     # Search & Fit Defaults
-    DEFAULT_KEYWORD: str = "QA Automation Engineer"
-    DEFAULT_LOCATION: str = "Hyderabad"
+    DEFAULT_KEYWORD: str = "Software Engineer"
+    DEFAULT_LOCATION: str = "Remote"
     DEFAULT_MAX_JOBS: int = 10
     DEFAULT_MIN_SCORE: int = 70
     REQUIRE_HUMAN_APPROVAL: bool = True
@@ -74,16 +74,16 @@ def get_browser_user_data_dir() -> Path:
     Resolves the persistent browser profile directory.
     Checks:
     1. Local current working directory .browser_context (if profile exists)
-    2. D:/Gravity/.browser_context (if profile exists on dev machine)
+    2. Project BASE_DIR / .browser_context (if profile exists)
     3. Centralized settings.USER_DATA_DIR (e.g. ~/.jobagent/.browser_context)
     """
     local_dir = Path(".browser_context").resolve()
     if (local_dir / "Default").exists():
         return local_dir
 
-    gravity_dir = Path("D:/Gravity/.browser_context")
-    if gravity_dir.exists() and (gravity_dir / "Default").exists():
-        return gravity_dir
+    base_dir_context = (BASE_DIR / ".browser_context").resolve()
+    if base_dir_context.exists() and (base_dir_context / "Default").exists():
+        return base_dir_context
 
     central_dir = Path(settings.USER_DATA_DIR).resolve()
     central_dir.mkdir(parents=True, exist_ok=True)

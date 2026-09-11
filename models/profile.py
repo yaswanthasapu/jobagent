@@ -3,19 +3,19 @@ from pydantic import BaseModel, Field, model_validator
 
 class PersonalInfo(BaseModel):
     full_name: str = Field(default="", description="Candidate's full name")
-    email: str = Field(default="yaswanth901@gmail.com", description="Candidate's email address")
-    phone: str = Field(default="6281306458", description="Candidate's contact phone number")
-    location: str = Field(default="Hyderabad, Telangana, India", description="Candidate's current location")
-    gender: Optional[str] = Field(default="Male", description="Candidate's gender")
-    race_ethnicity: Optional[str] = Field(default="Asian", description="Candidate's race/ethnicity")
+    email: str = Field(default="", description="Candidate's email address")
+    phone: str = Field(default="", description="Candidate's contact phone number")
+    location: str = Field(default="", description="Candidate's current location")
+    gender: Optional[str] = Field(default=None, description="Candidate's gender")
+    race_ethnicity: Optional[str] = Field(default=None, description="Candidate's race/ethnicity")
 
 class ProfessionalInfo(BaseModel):
-    designation: str = Field(default="QA Engineer", description="Current job title or designation")
-    total_experience_years: float = Field(default=3.9, description="Total professional experience in years")
-    current_company: str = Field(default="Magellanic-Cloud", description="Name of the current employer")
-    current_lpa: float = Field(default=8.9, description="Current CTC in Lakhs Per Annum (LPA)")
-    expected_lpa: float = Field(default=12.0, description="Expected CTC in Lakhs Per Annum (LPA)")
-    notice_period_days: int = Field(default=60, description="Official notice period in calendar days")
+    designation: str = Field(default="", description="Current job title or designation")
+    total_experience_years: float = Field(default=0.0, description="Total professional experience in years")
+    current_company: str = Field(default="", description="Name of the current employer")
+    current_lpa: float = Field(default=0.0, description="Current CTC in Lakhs Per Annum (LPA)")
+    expected_lpa: float = Field(default=0.0, description="Expected CTC in Lakhs Per Annum (LPA)")
+    notice_period_days: int = Field(default=30, description="Official notice period in calendar days")
 
 class JobPreferences(BaseModel):
     minimum_match_score: float = Field(default=60.0, description="Minimum fit score (0-100) to proceed with applying")
@@ -43,7 +43,7 @@ class CandidateProfile(BaseModel):
     professional: ProfessionalInfo = Field(default_factory=ProfessionalInfo)
     preferred_roles: List[str] = Field(default_factory=list, description="Alias for target_roles")
     job_preferences: JobPreferences = Field(default_factory=JobPreferences)
-    resume_filename: Optional[str] = Field(default="Yaswanth_Asapu_QA_Engineer_Selenium_RPA.pdf", description="Original filename of candidate's uploaded resume")
+    resume_filename: Optional[str] = Field(default=None, description="Original filename of candidate's uploaded resume")
 
     @model_validator(mode="before")
     @classmethod
@@ -81,10 +81,7 @@ class CandidateProfile(BaseModel):
             if prof_dict.get("designation"):
                 current_role = prof_dict["designation"]
             elif current_role:
-                if current_role == "QA Engineer":
-                    prof_dict["designation"] = "QA Automation Engineer"
-                else:
-                    prof_dict["designation"] = current_role
+                prof_dict["designation"] = current_role
             if exp is not None:
                 prof_dict["total_experience_years"] = float(exp)
             if c_lpa is not None:
