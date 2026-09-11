@@ -799,7 +799,7 @@ async def _process_linkedin_job_card(
                             continue
 
                     # 4. Error-based change: Missing Selection on Select / Radio (e.g. Face-to-Face round)
-                    if (has_selection_error or "required" in f_err or "select an option" in f_err) and f.field_type in [FormFieldType.SELECT, FormFieldType.RADIO]:
+                    if (has_selection_error or "required" in f_err or "select an option" in f_err or "valid answer" in f_err) and f.field_type in [FormFieldType.SELECT, FormFieldType.RADIO]:
                         if f.options:
                             opt_low = [o.strip().lower() for o in f.options]
                             if "yes" in opt_low:

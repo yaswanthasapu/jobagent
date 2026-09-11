@@ -379,9 +379,15 @@ class EasyApplyModal(BasePage):
 
                     await loc.scroll_into_view_if_needed()
                     await loc.click()
-                    await loc.fill("")
+                    await loc.press("Control+A")
+                    await loc.press("Backspace")
                     await loc.fill(fill_val)
-                    await self.human_delay(300, 600)
+                    try:
+                        await loc.dispatch_event("input")
+                        await loc.dispatch_event("change")
+                    except Exception:
+                        pass
+                    await self.human_delay(200, 400)
 
                     # Automatically select from typeahead/autocomplete dropdown if one appears (e.g. City/Location)
                     typeahead_item = modal.locator(
@@ -411,6 +417,14 @@ class EasyApplyModal(BasePage):
                     candidate = modal.locator(f"[id='{field.field_id}']").first
                     if await candidate.count() > 0 and await candidate.is_visible():
                         loc = candidate
+                clean_kw = re.sub(r'[^a-zA-Z0-9 ]', '', clean_label).strip()
+                first_words = " ".join(clean_kw.split()[:4])
+                if not loc and first_words:
+                    container = modal.locator("div.fb-dash-form-element, div.jobs-easy-apply-form-section__grouping, div.jobs-easy-apply-form-element").filter(has_text=first_words).first
+                    if await container.count() > 0:
+                        c_sel = container.locator("select").first
+                        if await c_sel.count() > 0 and await c_sel.is_visible():
+                            loc = c_sel
                 if not loc:
                     short_label = clean_label[:40]
                     candidate = modal.get_by_label(short_label, exact=False).first
@@ -418,7 +432,7 @@ class EasyApplyModal(BasePage):
                         loc = candidate
                 if not loc:
                     clean_short = "".join(c for c in clean_label[:30] if c.isalnum() or c.isspace())
-                    candidate = modal.locator(f"div:has-text('{clean_short}') select").first
+                    candidate = modal.locator(f"div.fb-dash-form-element:has-text('{clean_short}') select, div:has-text('{clean_short}') select").first
                     if await candidate.count() > 0 and await candidate.is_visible():
                         loc = candidate
                 if not loc and field.field_id and field.field_id.startswith("select_"):
@@ -429,13 +443,6 @@ class EasyApplyModal(BasePage):
                             loc = candidate
                     except Exception:
                         pass
-                if not loc:
-                    clean_kw = re.sub(r'[^a-zA-Z0-9 ]', '', clean_label).strip()
-                    first_words = " ".join(clean_kw.split()[:4])
-                    if first_words:
-                        candidate = modal.locator(f"div.fb-dash-form-element:has-text('{first_words}') select, div:has-text('{first_words}') select").first
-                        if await candidate.count() > 0:
-                            loc = candidate
                 if not loc:
                     candidate = modal.locator("select:visible").first
                     if await candidate.count() > 0:
@@ -453,6 +460,17 @@ class EasyApplyModal(BasePage):
                             return True
                     except Exception:
                         pass
+
+                    # Fallback: if value is 'Yes', select index 1 (the first real option)
+                    if value.strip().lower() == "yes":
+                        try:
+                            await loc.select_option(index=1, timeout=800)
+                            await self.human_delay(200, 400)
+                            curr_txt = await loc.evaluate("el => el.options[el.selectedIndex] ? el.options[el.selectedIndex].text.trim() : ''")
+                            if curr_txt and not curr_txt.lower().startswith("select"):
+                                return True
+                        except Exception:
+                            pass
 
                     try:
                         await loc.select_option(value=value, timeout=800)
