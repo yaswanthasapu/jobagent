@@ -1,0 +1,27 @@
+include README.md
+include LICENSE
+include requirements.txt
+include pyproject.toml
+include config/candidate_profile.template.json
+recursive-include ui/templates *
+recursive-include ui/static *
+
+# Exclude sensitive, local-only, and private data
+exclude .env
+exclude .env.*
+exclude applications.db
+exclude sharepoint_screen.png
+exclude AmazonCartMobileApp
+exclude jobagent.bat
+exclude jobagent.ps1
+exclude config/candidate_profile.json
+exclude config/agent_memory.json
+exclude config/resume.pdf
+
+recursive-exclude .browser_context *
+recursive-exclude screenshots *
+recursive-exclude tests *
+recursive-exclude .pytest_cache *
+recursive-exclude desktopapplication *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobAgent - Autonomous AI Job Application Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">⚡</div>
+                <div class="brand-title">JobAgent</div>
+                <div class="brand-badge">v1.0.25</div>
+            </div>
+
+            <ul class="nav-menu">
+                <li class="nav-item active" data-view="view-overview">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                    <span>Dashboard</span>
+                </li>
+                <li class="nav-item" data-view="view-profile">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>Candidate Profile</span>
+                </li>
+                <li class="nav-item" data-view="view-memory">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg>
+                    <span>Agent Memory & Q&A</span>
+                </li>
+                <li class="nav-item" data-view="view-applications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14l2 2 4-4"/></svg>
+                    <span>Applied Jobs</span>
+                </li>
+                <li class="nav-item" data-view="view-resume">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span>ATS Resume Review</span>
+                </li>
+                <li class="nav-item" data-view="view-runner">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Launch Automation</span>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="avatar">YA</div>
+                <div class="candidate-info">
+                    <span class="candidate-name" id="candidate-display-name">Yaswanth Asapu</span>
+                    <span class="candidate-role" id="candidate-display-role">QA Automation Engineer</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="top-header">
+                <div class="header-title-container">
+                    <h1 class="header-title" id="page-title">Agent Dashboard</h1>
+                    <span class="header-subtitle" id="page-subtitle">Autonomous job automation overview & metrics</span>
+                </div>
+                <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+                    <div id="header-running-pill" class="status-pill" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;">
+                        <span class="status-dot" style="background: #ef4444;"></span>
+                        <span>Agent Running</span>
+                    </div>
+                    <button id="btn-header-stop-agent" class="btn btn-danger btn-sm" style="display: none; font-weight: 600; padding: 6px 14px;">
+                        🛑 Stop Agent
+                    </button>
+                    <div class="status-pill">
+                        <span class="status-dot"></span>
+                        <span>Agent Online</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-body">
+                <!-- VIEW 1: Overview Dashboard -->
+                <section class="view-panel active" id="view-overview">
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">Applied Jobs</span>
+                                <span class="metric-icon">📋</span>
+                            </div>
+                            <div class="metric-value" id="metric-applied-count">0</div>
+                            <span class="metric-subtext">LinkedIn & Naukri submissions</span>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">Skills In Inventory</span>
+                                <span class="metric-icon">⚡</span>
+                            </div>
+                            <div class="metric-value" id="metric-skills-count">0</div>
+                            <span class="metric-subtext">Extracted & customizable</span>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">Remembered Answers</span>
+                                <span class="metric-icon">🧠</span>
+                            </div>
+                            <div class="metric-value" id="metric-answers-count">0</div>
+                            <span class="metric-subtext">Reused across job forms</span>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">Active Rules</span>
+                                <span class="metric-icon">🛡️</span>
+                            </div>
+                            <div class="metric-value" id="metric-rules-count">0</div>
+                            <span class="metric-subtext">Learned behavioral policies</span>
+                        </div>
+                    </div>
+
+                    <!-- Overview Quick Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">🚀 Quick Controls</h3>
+                                <span class="card-subtitle">Take direct action or configure your agent</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="document.querySelector('[data-view=view-runner]').click()">Launch Automation</button>
+                            <button class="btn btn-secondary" onclick="document.querySelector('[data-view=view-profile]').click()">Edit Candidate Profile</button>
+                            <button class="btn btn-secondary" onclick="document.querySelector('[data-view=view-memory]').click()">Manage Remembered Answers</button>
+                            <button class="btn btn-secondary" onclick="document.querySelector('[data-view=view-applications]').click()">View All Applied Jobs</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 2: Candidate Profile (Editable) -->
+                <section class="view-panel" id="view-profile">
+                    <!-- Resume Upload & Document Section in Candidate Profile -->
+                    <div class="card" style="border: 1px solid rgba(99, 102, 241, 0.35); background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">📄 Active Resume & Upload</h3>
+                                <span class="card-subtitle">Upload your resume here to automatically ground application forms, skill extraction, and ATS match evaluations</span>
+                            </div>
+                        </div>
+                        <div class="resume-upload-grid" style="margin-bottom: 0;">
+                            <div class="resume-dropzone" id="profile-resume-dropzone">
+                                <input type="file" id="profile-resume-file-input" accept=".pdf,.docx" style="display: none;">
+                                <div class="resume-dropzone-icon">📄</div>
+                                <div style="font-weight: 600; font-size: 15px;">Drag & Drop Resume PDF Here</div>
+                                <div style="color: var(--text-muted); font-size: 13px;">or click to browse from your computer</div>
+                                <button class="btn btn-primary btn-sm" id="btn-profile-browse-resume" style="margin-top: 6px;">📤 Upload New Resume</button>
+                                <span style="font-size: 11px; color: var(--text-muted);">PDF or DOCX (max 10MB)</span>
+                            </div>
+
+                            <div class="resume-info-card">
+                                <div class="resume-file-header">
+                                    <div class="resume-file-icon">📑</div>
+                                    <div class="resume-meta-details">
+                                        <span class="resume-meta-filename" id="profile-resume-active-name">resume.pdf</span>
+                                        <span class="resume-meta-sub" id="profile-resume-active-size">-- KB</span>
+                                        <span class="resume-meta-sub" id="profile-resume-active-date" style="font-size: 11px; color: var(--text-muted);">Last updated: --</span>
+                                    </div>
+                                </div>
+                                <div class="resume-actions" style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+                                    <a href="/api/resume/download" target="_blank" class="btn btn-secondary btn-sm" id="btn-profile-download-resume">📥 Download Resume</a>
+                                    <button class="btn btn-secondary btn-sm" id="btn-profile-reanalyze-resume">🔄 Re-Analyze ATS</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">👤 Personal Details</h3>
+                                <span class="card-subtitle">Contact info used by the agent on application forms</span>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" class="form-control" id="prof-full-name">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Email Address</label>
+                                <input type="email" class="form-control" id="prof-email">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Phone (10 Digits)</label>
+                                <input type="text" class="form-control" id="prof-phone">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Current Location</label>
+                                <input type="text" class="form-control" id="prof-location">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">💼 Professional Experience & Compensation</h3>
+                                <span class="card-subtitle">Values auto-filled into LinkedIn & Naukri Easy Apply questions</span>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Current Designation</label>
+                                <input type="text" class="form-control" id="prof-designation">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Total Experience (Years)</label>
+                                <input type="number" step="0.1" class="form-control" id="prof-experience">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Current Employer / Company</label>
+                                <input type="text" class="form-control" id="prof-company">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Current CTC (in LPA)</label>
+                                <input type="number" step="0.1" class="form-control" id="prof-current-lpa">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Expected CTC (in LPA)</label>
+                                <input type="number" step="0.1" class="form-control" id="prof-expected-lpa">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Notice Period (Days)</label>
+                                <input type="number" class="form-control" id="prof-notice-days">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">🎯 Target Preferences & Criteria</h3>
+                                <span class="card-subtitle">Define roles and criteria targeted by automation</span>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Target Roles (Comma-separated)</label>
+                                <input type="text" class="form-control" id="prof-roles">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Preferred Locations (Comma-separated)</label>
+                                <input type="text" class="form-control" id="prof-locations">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Minimum Match Score (%)</label>
+                                <input type="number" class="form-control" id="prof-min-score">
+                            </div>
+                            <div class="form-group" style="display: flex; flex-direction: row; gap: 20px; align-items: center; margin-top: 24px;">
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                                    <input type="checkbox" id="prof-easy-apply"> Easy Apply Only
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                                    <input type="checkbox" id="prof-require-approval"> Require Human Approval
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">⚡ Skill Inventory (Tag Manager)</h3>
+                                <span class="card-subtitle">Type skill name and press Enter to add. Click &times; to remove.</span>
+                            </div>
+                        </div>
+                        <div class="tag-input-wrapper" id="skills-tag-container">
+                            <input type="text" class="tag-inline-input" id="skill-inline-input" placeholder="+ Add skill (press Enter)...">
+                        </div>
+                    </div>
+
+                    <div class="card" style="border: 1px solid rgba(239, 68, 68, 0.35); background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title" style="color: #f87171;">🚫 Excluded Skills & Incompatible Tech Stacks (Hard Skip Guard)</h3>
+                                <span class="card-subtitle">Mandatory requirements matching these will trigger an autonomous HARD SKIP (e.g. Python, PyTest, C#, .NET, Salesforce, Ruby, PHP, Golang).</span>
+                            </div>
+                        </div>
+                        <div class="tag-input-wrapper" id="excluded-skills-tag-container" style="border-color: rgba(239, 68, 68, 0.3);">
+                            <input type="text" class="tag-inline-input" id="excluded-skill-inline-input" placeholder="+ Add excluded stack (press Enter)...">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 24px;">
+                        <button class="btn btn-primary" id="btn-save-profile" style="padding: 12px 28px; font-size: 14px;">
+                            💾 Save Profile Changes
+                        </button>
+                    </div>
+                </section>
+
+                <!-- VIEW 3: Agent Memory & Form Q&A Knowledge (Editable) -->
+                <section class="view-panel" id="view-memory">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">🧠 Remembered Form Answers (Knowledge Base)</h3>
+                                <span class="card-subtitle">Answers automatically stored and reused across job forms. Edit any value directly in the table.</span>
+                            </div>
+                            <button class="btn btn-primary btn-sm" id="btn-add-answer">+ Add Q&A Pair</button>
+                        </div>
+
+                        <div class="table-controls">
+                            <input type="text" class="form-control search-input" id="search-memory" placeholder="Search questions or skills...">
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 38%;">Question / Form Field Label</th>
+                                        <th style="width: 32%;">Remembered Answer (Editable)</th>
+                                        <th style="width: 14%;">Field Type</th>
+                                        <th style="width: 16%;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="memory-answers-tbody">
+                                    <!-- Dynamic rows from app.js -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">📜 Conversation Rules & Decision Policies</h3>
+                                <span class="card-subtitle">Persistent instructions guiding the agent's behavior</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+                            <input type="text" class="form-control" id="new-rule-input" placeholder="Enter new behavioral rule (e.g. 'Rule: Phone without +91')..." style="flex: 1;">
+                            <button class="btn btn-primary btn-sm" id="btn-add-rule">+ Add Rule</button>
+                        </div>
+                        <div id="rules-list-container" style="display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Rules dynamic list -->
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">⚙️ Agent Application Defaults</h3>
+                                <span class="card-subtitle">Preferred platforms and default parameters</span>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Preferred Platform</label>
+                                <select class="form-control" id="pref-platform">
+                                    <option value="all">All (LinkedIn + Naukri)</option>
+                                    <option value="linkedin">LinkedIn Only</option>
+                                    <option value="naukri">Naukri Only</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Default Freshness</label>
+                                <select class="form-control" id="pref-freshness">
+                                    <option value="24h">Past 24 Hours</option>
+                                    <option value="week">Past Week</option>
+                                    <option value="month">Past Month</option>
+                                    <option value="any">Any Time</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; margin-top: 24px;">
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                                    <input type="checkbox" id="pref-auto-approve"> Auto-Approve Applications (Default)
+                                </label>
+                            </div>
+                        </div>
+                        <div style="margin-top: 18px;">
+                            <button class="btn btn-primary btn-sm" id="btn-save-memory-prefs">Save Memory Preferences</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 4: Applied Jobs Tracker -->
+                <section class="view-panel" id="view-applications">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">📋 Full Job Application History</h3>
+                                <span class="card-subtitle">All jobs submitted or processed with match scores and status</span>
+                            </div>
+                        </div>
+
+                        <div class="table-controls">
+                            <input type="text" class="form-control search-input" id="search-jobs" placeholder="Filter by title, company, location...">
+                            <div style="display: flex; gap: 10px;">
+                                <select class="form-control" id="filter-platform" style="width: 160px;">
+                                    <option value="all">All Platforms</option>
+                                    <option value="linkedin">LinkedIn</option>
+                                    <option value="naukri">Naukri</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Job Title</th>
+                                        <th>Company</th>
+                                        <th>Location</th>
+                                        <th>Platform</th>
+                                        <th>Fit Score</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="applications-tbody">
+                                    <!-- Dynamic rows from app.js -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 5: ATS Resume Review -->
+                <section class="view-panel" id="view-resume">
+                    <!-- Resume Upload & Active File Manager -->
+                    <div class="resume-upload-grid">
+                        <div class="resume-dropzone" id="resume-dropzone">
+                            <input type="file" id="resume-file-input" accept=".pdf,.docx" style="display: none;">
+                            <div class="resume-dropzone-icon">📄</div>
+                            <div style="font-weight: 600; font-size: 15px;">Drag & Drop Resume PDF Here</div>
+                            <div style="color: var(--text-muted); font-size: 13px;">or click to browse from your computer</div>
+                            <button class="btn btn-primary btn-sm" id="btn-browse-resume" style="margin-top: 6px;">📤 Upload New Resume</button>
+                            <span style="font-size: 11px; color: var(--text-muted);">PDF or DOCX (max 10MB)</span>
+                        </div>
+
+                        <div class="resume-info-card">
+                            <div class="resume-file-header">
+                                <div class="resume-file-icon">📑</div>
+                                <div class="resume-meta-details">
+                                    <span class="resume-meta-filename" id="resume-active-name">resume.pdf</span>
+                                    <span class="resume-meta-sub" id="resume-active-size">-- KB</span>
+                                    <span class="resume-meta-sub" id="resume-active-date" style="font-size: 11px; color: var(--text-muted);">Last updated: --</span>
+                                </div>
+                            </div>
+                            <div class="resume-actions-group">
+                                <a id="btn-download-resume" href="/api/resume/download" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">📥 Download Resume</a>
+                                <button id="btn-reanalyze-resume" class="btn btn-secondary btn-sm">🔄 Re-Analyze ATS</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card" style="border-left: 4px solid var(--accent-emerald);">
+                            <div class="metric-header">
+                                <span class="metric-label">ATS Readiness Score</span>
+                                <span class="metric-icon">🎯</span>
+                            </div>
+                            <div class="metric-value" style="color: #34d399;"><span id="ats-score-display">--</span><span style="font-size: 16px; color: var(--text-muted);">/100</span></div>
+                            <span class="metric-subtext">Automated algorithmic assessment</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">📄 ATS Executive Summary</h3>
+                            </div>
+                        </div>
+                        <p id="ats-summary-text" style="color: #cbd5e1; font-size: 14px; line-height: 1.6;"></p>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3 class="card-title" style="color: #a7f3d0;">✓ Key Strengths Identified</h3>
+                                </div>
+                            </div>
+                            <ul id="ats-strengths-list" style="list-style: none; font-size: 13px;"></ul>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3 class="card-title" style="color: #fde68a;">⚡ Actionable Recommendations</h3>
+                                </div>
+                            </div>
+                            <ul id="ats-recommendations-list" style="list-style: none; font-size: 13px;"></ul>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title" style="color: #fb7185;">🔍 High-Demand Missing Keywords</h3>
+                                <span class="card-subtitle">Consider adding these to your profile skills if you have relevant experience</span>
+                            </div>
+                        </div>
+                        <div id="ats-missing-keywords" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                    </div>
+
+                    <!-- Extracted Resume Text Box (Transparent Agent Grounding) -->
+                    <div class="card" style="margin-top: 20px;">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">📄 Extracted Resume Text (Agent Form Grounding)</h3>
+                                <span class="card-subtitle">Real-time text extracted from your PDF, directly accessible by the agent to answer job application questions</span>
+                            </div>
+                        </div>
+                        <div class="extracted-text-box" id="resume-extracted-text">Loading extracted resume content...</div>
+                    </div>
+                </section>
+
+                <!-- VIEW 6: Launch Automation & Live Streaming Logs -->
+                <section class="view-panel" id="view-runner">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3 class="card-title">🚀 Launch AI Job Application Run</h3>
+                                <span class="card-subtitle">Configure search parameters and launch the autonomous runner</span>
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Target Role / Keyword</label>
+                                <input type="text" class="form-control" id="run-role" value="QA Automation Engineer">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Location</label>
+                                <input type="text" class="form-control" id="run-location" value="Hyderabad">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Platform</label>
+                                <select class="form-control" id="run-platform">
+                                    <option value="all">Both (LinkedIn + Naukri)</option>
+                                    <option value="linkedin">LinkedIn</option>
+                                    <option value="naukri">Naukri</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Date Freshness</label>
+                                <select class="form-control" id="run-freshness">
+                                    <option value="24h">Past 24 Hours</option>
+                                    <option value="week">Past Week</option>
+                                    <option value="month">Past Month</option>
+                                    <option value="any">Any Time</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Max Jobs per Platform</label>
+                                <input type="number" class="form-control" id="run-max-jobs" value="3">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Min Skill Match Score (%)</label>
+                                <input type="number" class="form-control" id="run-min-score" value="60" min="0" max="100" title="Posts with skill match score below this will be skipped">
+                            </div>
+                            <div class="form-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 14px;">
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                                    <input type="checkbox" id="run-remote-only"> Remote Jobs Only
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                                    <input type="checkbox" id="run-auto-approve" checked> Auto-Apply (Submit without pause)
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                                    <input type="checkbox" id="run-dry-run" checked> Run in Safe DRY-RUN Mode
+                                </label>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn btn-primary" id="btn-launch-agent" style="padding: 12px 24px; font-size: 14px;">
+                                🚀 Launch Job Agent
+                            </button>
+                            <button class="btn btn-danger" id="btn-stop-agent" style="padding: 12px 24px; font-size: 14px; font-weight: 600; display: none; background: #dc2626; border-color: #b91c1c; color: white;">
+                                🛑 Stop Agent
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- HITL Action Required Card (Displayed dynamically when agent needs user interaction) -->
+                    <div class="card hitl-card" id="hitl-alert-container" style="display: none; border: 2px solid #f59e0b; background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(30, 41, 59, 0.95) 100%); margin-bottom: 20px; box-shadow: 0 0 25px rgba(245, 158, 11, 0.2);">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(245, 158, 11, 0.3); padding-bottom: 12px;">
+                            <div class="card-title-group" style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 20px;">🔔</span>
+                                <h3 class="card-title" id="hitl-title" style="color: #fbbf24; font-size: 16px;">Action Required: Human Input Needed</h3>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; font-weight: 600; padding: 4px 10px;">
+                                    ⏳ <span id="hitl-timer">120</span>s remaining
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style="padding: 16px 0 6px 0;">
+                            <p id="hitl-message" style="color: #fef3c7; font-size: 14px; line-height: 1.5; margin-bottom: 14px;"></p>
+
+                            <!-- Dynamic interactive body -->
+                            <div id="hitl-interactive-body" style="margin-bottom: 16px;"></div>
+
+                            <!-- Action controls -->
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 14px;">
+                                <button class="btn btn-primary" id="btn-hitl-browser-resolved" style="background: #f59e0b; border-color: #d97706; color: #1e293b; font-weight: 700;">
+                                    ✓ I Resolved It in Browser
+                                </button>
+                                <button class="btn btn-secondary" id="btn-hitl-skip-job" style="border-color: #ef4444; color: #f87171;">
+                                    ✕ Skip This Job
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Autonomous Decision Engine: Live Decision Card -->
+                    <div class="card decision-engine-card" id="live-decision-container" style="display: none; border: 1px solid rgba(16, 185, 129, 0.4); background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(30, 41, 59, 0.95) 100%); margin-bottom: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px;">
+                            <div class="card-title-group" style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 20px;">🧠</span>
+                                <h3 class="card-title" style="font-size: 16px;">Autonomous Decision Engine — Live Evaluation</h3>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="live-decision-badge" class="badge" style="font-size: 13px; font-weight: 700; padding: 4px 12px;">APPLY</span>
+                                <span id="live-priority-badge" class="badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid #6366f1; font-weight: 600; padding: 4px 10px;">Priority A</span>
+                            </div>
+                        </div>
+
+                        <div style="padding: 16px 0 6px 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div>
+                                    <div id="live-decision-title" style="font-weight: 700; font-size: 16px; color: #f8fafc;">Job Title</div>
+                                    <div id="live-decision-meta" style="color: var(--text-muted); font-size: 13px;">Company &bull; Location</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 12px; color: var(--text-muted);">Composite Fit Score</div>
+                                    <div id="live-decision-score" style="font-size: 22px; font-weight: 800; color: #34d399;">--%</div>
+                                </div>
+                            </div>
+
+                            <!-- 5-Factor Fit Scoring Breakdown -->
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
+                                <div>
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Technical (50%)</div>
+                                    <div id="score-bar-tech" style="font-weight: 700; font-size: 14px; color: #60a5fa;">--%</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Experience (20%)</div>
+                                    <div id="score-bar-exp" style="font-weight: 700; font-size: 14px; color: #a78bfa;">--%</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Role Relevance (15%)</div>
+                                    <div id="score-bar-role" style="font-weight: 700; font-size: 14px; color: #38bdf8;">--%</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Preferences (10%)</div>
+                                    <div id="score-bar-prefs" style="font-weight: 700; font-size: 14px; color: #34d399;">--%</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Risk Factor (5%)</div>
+                                    <div id="score-bar-risk" style="font-weight: 700; font-size: 14px; color: #fbbf24;">--%</div>
+                                </div>
+                            </div>
+
+                            <!-- Skills & Reasons -->
+                            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                                <div id="live-decision-matched-row" style="display: none;">
+                                    <strong style="color: #34d399;">✓ Matched Skills:</strong>
+                                    <span id="live-decision-matched-skills" style="margin-left: 6px;"></span>
+                                </div>
+                                <div id="live-decision-missing-row" style="display: none;">
+                                    <strong style="color: #fbbf24;">⚠️ Missing Skills:</strong>
+                                    <span id="live-decision-missing-skills" style="margin-left: 6px;"></span>
+                                </div>
+                                <div id="live-decision-incompatible-row" style="display: none;">
+                                    <strong style="color: #f87171;">🚫 Incompatible Stack:</strong>
+                                    <span id="live-decision-incompatible-skills" style="margin-left: 6px;"></span>
+                                </div>
+                                <div>
+                                    <strong style="color: #cbd5e1;">Decision Reasoning:</strong>
+                                    <span id="live-decision-reasoning" style="color: #94a3b8; margin-left: 6px;"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Terminal Output -->
+                    <div class="card">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div class="card-title-group">
+                                <h3 class="card-title">🖥️ Live Automation Logs</h3>
+                                <span class="card-subtitle">Real-time status and browser execution progress</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button class="btn btn-danger btn-sm" id="btn-stop-agent-logs" style="display: none; font-weight: 600; background: #dc2626; border-color: #b91c1c; color: white;">
+                                    🛑 Stop Agent
+                                </button>
+                                <button class="btn btn-secondary btn-sm" id="btn-clear-logs">
+                                    🗑️ Clear Logs
+                                </button>
+                            </div>
+                        </div>
+                        <div class="console-terminal" id="runner-terminal">
+                            <div class="console-line"><span class="console-time">[System]</span> <span class="console-info">Ready to launch job automation. Logs will stream here.</span></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobagent"
+version = "1.0.25"
+description = "Autonomous Multi-Platform AI Job Application Agent for LinkedIn and Naukri"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Yaswanth Asapu", email = "yaswanth901@gmail.com" }
+]
+keywords = [
+    "job-application",
+    "job-agent",
+    "linkedin",
+    "naukri",
+    "automation",
+    "playwright",
+    "ai",
+    "gemini"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+]
+dependencies = [
+    "playwright>=1.40.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.0.0",
+    "rich>=13.0.0",
+    "SQLAlchemy>=2.0.0",
+    "aiosqlite>=0.19.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+    "reportlab>=4.0.0",
+    "pypdf>=3.0.0",
+    "google-genai>=0.1.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0.0"]
+all = ["google-genai>=0.1.0", "openai>=1.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/yaswanth901/jobagent"
+
+[project.scripts]
+jobagent = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "apply_jobs"]
+
+[tool.setuptools.packages.find]
+include = ["agents*", "automation*", "config*", "models*", "services*", "ui*"]
+exclude = ["tests*", ".browser_context*", "screenshots*"]
+
+[tool.setuptools.package-data]
+config = ["*.template.json", "*.example.json"]
+ui = ["templates/*", "static/*"]
+

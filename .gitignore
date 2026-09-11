@@ -1,0 +1,39 @@
+# Environment & Secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Local databases and caches
+*.db
+*.sqlite
+*.sqlite3
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution & Build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Browser state & Sessions
+.browser_context/
+screenshots/
+
+# Private user profile & memory
+config/candidate_profile.json
+config/agent_memory.json
+config/resume.pdf
+config/resume_meta.json
+sharepoint_screen.png
+AmazonCartMobileApp
+*.pdf
+
+# Testing & IDE
+.pytest_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
