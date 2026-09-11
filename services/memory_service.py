@@ -155,15 +155,65 @@ class MemoryService:
             return None
         norm_key = self._normalize_key(label)
 
+        def _sanitize_answer(ans: Optional[str], q_label: str) -> Optional[str]:
+            if ans is None:
+                return None
+            q_lower = q_label.lower()
+
+            # Rule: Stakeholder communication question always uses 0 value
+            if any(phrase in q_lower for phrase in [
+                "communicated testing progress",
+                "communicating testing progress",
+                "release readiness to stakeholders",
+                "testing progress, risks, defects",
+                "stakeholders or external clients"
+            ]):
+                return "0"
+
+            # Rule: INR / Annual compensation / Whole number > 100
+            if any(term in q_lower for term in ["in inr", "inr", "annual", "larger than 100", "200000", "350000", "rupees", "rupee"]):
+                try:
+                    num_val = float(re.sub(r'[^\d.]', '', ans))
+                    if num_val > 0 and num_val <= 100:
+                        # Convert LPA e.g. 8.99 -> 899000, 15 -> 1500000
+                        return str(int(round(num_val * 100000)))
+                except (ValueError, TypeError):
+                    pass
+            # Rule: Numeric/experience questions must never return non-numeric answers (e.g. 'Yes', 'No', or long descriptions)
+            is_numeric_q = (
+                any(q_kw in q_lower for q_kw in [
+                    "how many", "years of", "years experience", "number of",
+                    "decimal number", "how soon", "notice period in days",
+                    "larger than 0", "larger than 100", "ctc in lpa", "ctc in inr"
+                ])
+                and not any(bin_kw in q_lower for bin_kw in ["do you have", "are you", "can you", "will you", "have you", "yes/no"])
+            )
+            if is_numeric_q:
+                # If the candidate answer has no digits, it cannot be valid for a numeric question
+                if not re.search(r'\d', ans):
+                    return None
+
+            # Rule: Notice period / How soon can you join must never return 'No'
+            if any(term in q_lower for term in ["how soon can you join", "notice period in days", "mention the number of days"]):
+                if ans.strip().lower() in ["no", "yes", "false", "true"]:
+                    return "60"
+
+            # Rule: Face to Face / interview questions must never return a location string
+            if any(term in q_lower for term in ["face to face", "f2f", "come for round", "walk-in"]):
+                if "india" in ans.lower() or "hyderabad" in ans.lower() or len(ans) > 20:
+                    return "Yes"
+
+            return ans
+
         # 1. Exact match
         if norm_key in saved:
-            return saved[norm_key].get("answer")
+            return _sanitize_answer(saved[norm_key].get("answer"), label)
 
         # Check multi-line label or labels containing 'Required' / '*'
         first_line = label.split("\n")[0]
         norm_first_line = self._normalize_key(first_line.replace("Required", "").replace("*", ""))
         if norm_first_line and norm_first_line in saved:
-            return saved[norm_first_line].get("answer")
+            return _sanitize_answer(saved[norm_first_line].get("answer"), label)
 
         # Strip standard conversational question prefixes
         clean_prompt = norm_key
@@ -181,13 +231,15 @@ class MemoryService:
             clean_prompt = re.sub(pat, "", clean_prompt).strip()
 
         if clean_prompt in saved:
-            return saved[clean_prompt].get("answer")
+            return _sanitize_answer(saved[clean_prompt].get("answer"), label)
 
         clean_first_prompt = norm_first_line
         for pat in prefixes_to_strip:
             clean_first_prompt = re.sub(pat, "", clean_first_prompt).strip()
         if clean_first_prompt in saved:
-            return saved[clean_first_prompt].get("answer")
+            return _sanitize_answer(saved[clean_first_prompt].get("answer"), label)
+
+        is_incoming_numeric = any(q_kw in label.lower() for q_kw in ["how many", "years of", "number of", "decimal number"])
 
         # 2. Key boundary match sorted by descending length (most specific keys match first)
         sorted_keys = sorted(saved.keys(), key=lambda k: len(k), reverse=True)
@@ -199,15 +251,26 @@ class MemoryService:
                 or re.search(rf"\b{re.escape(k)}\b", clean_prompt)
                 or re.search(rf"\b{re.escape(k)}\b", clean_first_prompt)
             ):
-                return entry.get("answer")
+                ans = entry.get("answer")
+                if is_incoming_numeric and (not ans or not re.search(r'\d', str(ans))):
+                    continue
+                return _sanitize_answer(ans, label)
 
         # 3. Reverse boundary match (if norm_key is contained as whole words in saved key)
         for k in sorted_keys:
             entry = saved[k]
+            ans = entry.get("answer")
+            if is_incoming_numeric and (not ans or not re.search(r'\d', str(ans))):
+                continue
+            # Do not match short skill names against long descriptive questions
             if len(clean_prompt) >= 3 and re.search(rf"\b{re.escape(clean_prompt)}\b", k):
-                return entry.get("answer")
+                if is_incoming_numeric and entry.get("field_type") in ["RADIO", "SELECT"]:
+                    continue
+                return _sanitize_answer(ans, label)
             if len(clean_first_prompt) >= 3 and re.search(rf"\b{re.escape(clean_first_prompt)}\b", k):
-                return entry.get("answer")
+                if is_incoming_numeric and entry.get("field_type") in ["RADIO", "SELECT"]:
+                    continue
+                return _sanitize_answer(ans, label)
 
         return None
 
@@ -246,6 +309,12 @@ class MemoryService:
                 ("java", total_exp, "number"),
                 ("rest assured", total_exp, "number"),
                 ("restassured", total_exp, "number"),
+                ("current ctc in inr", cur_inr, "number"),
+                ("expected ctc in inr", exp_inr, "number"),
+                ("please enter your current ctc in inr", cur_inr, "number"),
+                ("please enter your expected ctc in inr", exp_inr, "number"),
+                ("current annual compensation in inr", cur_inr, "number"),
+                ("expected annual compensation in inr", exp_inr, "number"),
                 ("current ctc inr", cur_inr, "number"),
                 ("expected ctc inr", exp_inr, "number"),
                 ("current ctc", cur_lpa, "number"),

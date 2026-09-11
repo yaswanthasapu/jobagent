@@ -20,6 +20,8 @@ class FormField(BaseModel):
     is_required: bool = False
     selector: Optional[str] = None
     is_sensitive: bool = False
+    help_text: Optional[str] = None
+    validation_error: Optional[str] = None
 
 class FormStep(BaseModel):
     step_index: int = 0

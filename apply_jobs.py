@@ -704,6 +704,10 @@ async def _process_linkedin_job_card(
             scroll_passes += 1
             await asyncio.sleep(0.3)
 
+        # Ensure modal is fully scrolled to reveal all fields down to bottom before clicking next
+        await modal.scroll_modal_to_bottom()
+        await asyncio.sleep(0.4)
+
         advanced = await modal.click_next() or await modal.click_review()
         if not advanced:
             if await modal.is_review_step():
@@ -713,8 +717,100 @@ async def _process_linkedin_job_card(
                 errors = await modal.get_validation_errors()
                 if errors:
                     console.print(f"  [yellow]Validation errors on step: {', '.join(errors)}[/yellow]")
+
                 retry_fields = await modal.inspect_fields()
+                has_larger_100_error = any("larger than 100" in e.lower() or "whole number larger" in e.lower() for e in errors)
+                has_selection_error = any("make a selection" in e.lower() or "select" in e.lower() or "required" in e.lower() or "valid answer" in e.lower() for e in errors)
+                has_whole_number_error = any("whole number" in e.lower() for e in errors)
+                has_decimal_gt0_error = any("larger than 0" in e.lower() or "decimal number" in e.lower() for e in errors)
+
                 for f in retry_fields:
+                    f_err = (f.validation_error or "").lower()
+                    f_label_low = f.label.lower()
+
+                    # 1. Error-based change: "Enter a whole number larger than 100"
+                    if has_larger_100_error or "larger than 100" in f_err:
+                        cur_val_str = f.current_value or ""
+                        try:
+                            val_num = float(re.sub(r'[^\d.]', '', cur_val_str))
+                        except (ValueError, TypeError):
+                            val_num = 0.0
+
+                        is_ctc_field = any(w in f_label_low for w in ["ctc", "salary", "compensation"])
+                        if is_ctc_field or (0 < val_num <= 100):
+                            if "current" in f_label_low:
+                                prefs_inr = memory_service.get_preference("current_ctc_inr")
+                                new_val = str(int(prefs_inr)) if prefs_inr else str(int(profile.professional.current_lpa * 100000))
+                            elif "expected" in f_label_low or "desired" in f_label_low:
+                                prefs_exp = memory_service.get_preference("expected_ctc_inr")
+                                new_val = str(int(prefs_exp)) if prefs_exp else str(int(profile.professional.expected_lpa * 100000))
+                            elif val_num > 0:
+                                new_val = str(int(round(val_num * 100000)))
+                            else:
+                                new_val = str(int(profile.professional.current_lpa * 100000))
+
+                            console.print(f"  [bold green]✓ Auto-correcting entry based on error 'Enter a whole number larger than 100':[/bold green] '{f.label[:35]}' [{cur_val_str}] -> [bold cyan]{new_val}[/bold cyan]")
+                            await modal.fill_field(f, new_val, resume_file_path=resume_path)
+                            memory_service.save_form_answer(f.label, new_val, "number")
+                            continue
+
+                    # 2. Error-based change: "Enter a whole number" (e.g. for years 3.9 -> 4)
+                    if has_whole_number_error or "whole number" in f_err:
+                        cur_val_str = f.current_value or ""
+                        if "." in cur_val_str:
+                            try:
+                                rounded_val = str(int(round(float(cur_val_str))))
+                                console.print(f"  [bold green]✓ Rounding decimal to whole number based on validation error:[/bold green] '{f.label[:35]}' [{cur_val_str}] -> [bold cyan]{rounded_val}[/bold cyan]")
+                                await modal.fill_field(f, rounded_val, resume_file_path=resume_path)
+                                memory_service.save_form_answer(f.label, rounded_val, "number")
+                                continue
+                            except ValueError:
+                                pass
+
+                    # 3. Error-based change: "Enter a decimal number larger than 0.0" (e.g. invalid 'Yes' or '0' in numeric field)
+                    if has_decimal_gt0_error or "larger than 0" in f_err or "decimal number" in f_err:
+                        cur_val_str = f.current_value or ""
+                        is_positive_num = False
+                        try:
+                            chk_f = float(re.sub(r'[^\d.]', '', cur_val_str))
+                            if chk_f > 0.0:
+                                is_positive_num = True
+                        except (ValueError, TypeError):
+                            is_positive_num = False
+
+                        if not is_positive_num:
+                            if any(w in f_label_low for w in ["how soon", "days", "notice", "join"]):
+                                new_val = str(profile.professional.notice_period_days)
+                            else:
+                                # Extract target skill or default to realistic experience
+                                m_sk = re.search(r'(?:with|in|using)\s+([^?*:]+)', f_label_low)
+                                sk_name = m_sk.group(1).strip() if m_sk else f_label_low
+                                matched_exp = form_agent._match_skill_experience(sk_name, profile)
+                                if matched_exp > 0.0:
+                                    new_val = str(matched_exp)
+                                elif any(s.lower() in f_label_low for s in profile.skills):
+                                    new_val = "2.0"
+                                else:
+                                    new_val = "1.0"
+
+                            console.print(f"  [bold green]✓ Auto-correcting entry based on error 'Enter a decimal number larger than 0.0':[/bold green] '{f.label[:35]}' [{cur_val_str}] -> [bold cyan]{new_val}[/bold cyan]")
+                            await modal.fill_field(f, new_val, resume_file_path=resume_path)
+                            memory_service.save_form_answer(f.label, new_val, "number")
+                            continue
+
+                    # 4. Error-based change: Missing Selection on Select / Radio (e.g. Face-to-Face round)
+                    if (has_selection_error or "required" in f_err or "select an option" in f_err) and f.field_type in [FormFieldType.SELECT, FormFieldType.RADIO]:
+                        if f.options:
+                            opt_low = [o.strip().lower() for o in f.options]
+                            if "yes" in opt_low:
+                                yes_idx = opt_low.index("yes")
+                                sel_opt = f.options[yes_idx]
+                                console.print(f"  [bold green]✓ Auto-selecting 'Yes' for required choice based on validation error:[/bold green] '{f.label[:35]}'")
+                                await modal.fill_field(f, sel_opt, resume_file_path=resume_path)
+                                memory_service.save_form_answer(f.label, sel_opt, f.field_type.value)
+                                continue
+
+                    # 3. Dynamic resolution fallback for other fields
                     val, needs_hitl = await form_agent.resolve_field_value(f, profile, job_description=details.description_text)
                     if needs_hitl or not val:
                         val = await handle_new_field_hitl(
@@ -728,6 +824,9 @@ async def _process_linkedin_job_card(
                         await modal.fill_field(f, val, resume_file_path=resume_path)
                 await asyncio.sleep(0.5)
 
+            # Re-attempt advancing step after error recovery
+            await modal.scroll_modal_to_bottom()
+            await asyncio.sleep(0.3)
             if not (await modal.click_next() or await modal.click_review()):
                 if await modal.is_review_step():
                     break

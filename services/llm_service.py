@@ -712,8 +712,23 @@ Answer:"""
                         return options[idx]
             return "Yes"
 
+        # 0. Stakeholder / External Client Communication: return 0 value
+        if any(phrase in q for phrase in [
+            "communicated testing progress",
+            "communicating testing progress",
+            "release readiness to stakeholders",
+            "testing progress, risks, defects",
+            "stakeholders or external clients"
+        ]):
+            if options:
+                for idx, opt in enumerate(options_lower):
+                    if any(z in opt for z in ["0", "none", "no experience", "no"]):
+                        return options[idx]
+                return options[0]
+            return "0"
+
         # 3. Notice period
-        if "notice period" in q:
+        if "notice period" in q or "how soon can you join" in q:
             days = candidate_context.get("notice_period_days", 60)
             if options:
                 for idx, opt in enumerate(options_lower):
@@ -722,13 +737,32 @@ Answer:"""
                     if "immediate" in opt and days <= 15:
                         return options[idx]
                 return options[0]
+            if "day" in q:
+                return str(days)
             return f"{days} days"
 
         # 4. Current / Expected CTC
-        if "current ctc" in q or "current salary" in q or "current lpa" in q:
-            return str(candidate_context.get("current_lpa", 8.9))
-        if "expected ctc" in q or "expected salary" in q or "expected lpa" in q:
-            return str(candidate_context.get("expected_lpa", 12.0))
+        if any(w in q for w in ["current ctc", "current salary", "current compensation", "current annual compensation", "current lpa"]):
+            cur_lpa = float(candidate_context.get("current_lpa", 8.9))
+            if "month" in q:
+                return str(int((cur_lpa * 100000) / 12))
+            is_lpa = any(w in q for w in ["lakh", "lakhs", "lpa", "lac"]) and not any(w in q for w in ["in inr", "inr", "larger than 100", "200000"])
+            if is_lpa:
+                return str(int(cur_lpa)) if cur_lpa.is_integer() else str(cur_lpa)
+            if any(w in q for w in ["inr", "annual", "larger than 100", "200000", "rupee", "whole number"]):
+                return str(int(cur_lpa * 100000))
+            return str(int(cur_lpa * 100000))
+
+        if any(w in q for w in ["expected ctc", "expected salary", "expected compensation", "expected annual compensation", "salary expectation", "expected lpa"]):
+            exp_lpa = float(candidate_context.get("expected_lpa", 15.0))
+            if "month" in q:
+                return str(int((exp_lpa * 100000) / 12))
+            is_lpa = any(w in q for w in ["lakh", "lakhs", "lpa", "lac"]) and not any(w in q for w in ["in inr", "inr", "larger than 100", "350000"])
+            if is_lpa:
+                return str(int(exp_lpa)) if exp_lpa.is_integer() else str(exp_lpa)
+            if any(w in q for w in ["inr", "annual", "larger than 100", "350000", "rupee", "whole number"]):
+                return str(int(exp_lpa * 100000))
+            return str(int(exp_lpa * 100000))
 
         # 5. Work authorization / Citizenship
         if "legally authorized" in q or "authorized to work" in q:

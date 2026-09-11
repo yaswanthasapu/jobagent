@@ -141,6 +141,9 @@ class EasyApplyModal(BasePage):
 
             field_id = await loc.get_attribute("id") or f"input_{i}"
             label = await self._find_label_for_element(loc)
+            help_text = await self._find_help_text_for_element(loc)
+            val_err = await self._find_error_for_element(loc)
+            combined_label = f"{label}\n{help_text}" if help_text and help_text.lower() not in label.lower() else label
             input_type = await loc.get_attribute("type") or "text"
             input_mode = await loc.get_attribute("inputmode") or ""
             current_val = await loc.input_value()
@@ -149,11 +152,13 @@ class EasyApplyModal(BasePage):
 
             fields.append(FormField(
                 field_id=field_id,
-                label=label,
+                label=combined_label,
                 field_type=ftype,
                 current_value=current_val,
                 selector=f"#{field_id}" if field_id.startswith("input") is False else None,
-                is_required=await loc.get_attribute("required") is not None
+                is_required=await loc.get_attribute("required") is not None,
+                help_text=help_text,
+                validation_error=val_err
             ))
 
         # 2. Select / Dropdowns
@@ -166,6 +171,9 @@ class EasyApplyModal(BasePage):
 
             field_id = await loc.get_attribute("id") or f"select_{i}"
             label = await self._find_label_for_element(loc)
+            help_text = await self._find_help_text_for_element(loc)
+            val_err = await self._find_error_for_element(loc)
+            combined_label = f"{label}\n{help_text}" if help_text and help_text.lower() not in label.lower() else label
             
             # Extract currently selected text/value if already chosen
             current_val = ""
@@ -183,12 +191,14 @@ class EasyApplyModal(BasePage):
 
             fields.append(FormField(
                 field_id=field_id,
-                label=label,
+                label=combined_label,
                 field_type=FormFieldType.SELECT,
                 options=clean_opts,
                 current_value=current_val,
                 selector=f"#{field_id}" if field_id.startswith("select") is False else None,
-                is_required=await loc.get_attribute("required") is not None
+                is_required=await loc.get_attribute("required") is not None,
+                help_text=help_text,
+                validation_error=val_err
             ))
 
         # 3. Radio Groups (fieldsets)
@@ -206,6 +216,10 @@ class EasyApplyModal(BasePage):
                 clean_label = re.sub(r'\s+', ' ', raw_label.replace("Required", "").replace("*", "")).strip()
             else:
                 clean_label = f"Radio Group {i}"
+
+            help_text = await self._find_help_text_for_element(loc)
+            val_err = await self._find_error_for_element(loc)
+            combined_label = f"{clean_label}\n{help_text}" if help_text and help_text.lower() not in clean_label.lower() else clean_label
 
             radio_inputs = loc.locator("input[type='radio']")
             r_count = await radio_inputs.count()
@@ -236,12 +250,14 @@ class EasyApplyModal(BasePage):
             field_id = radio_name or await loc.get_attribute("id") or f"fieldset_{i}"
             fields.append(FormField(
                 field_id=field_id,
-                label=clean_label,
+                label=combined_label,
                 field_type=FormFieldType.RADIO,
                 options=options,
                 current_value=current_val,
                 selector=f"input[name='{radio_name}']" if radio_name else None,
-                is_required=True
+                is_required=True,
+                help_text=help_text,
+                validation_error=val_err
             ))
 
         # 4. Resume handling (prioritizes using existing resume on LinkedIn)
@@ -346,6 +362,20 @@ class EasyApplyModal(BasePage):
                         num_m = re.search(r'(\d+(?:\.\d+)?)', fill_val)
                         if num_m:
                             fill_val = num_m.group(1)
+                        else:
+                            fill_val = "0"
+
+                        # Safeguard against LPA decimals in whole-number INR compensation fields
+                        # e.g. "Enter a whole number larger than 100", "Example: 200000", "in INR"
+                        comb_text = f"{clean_label} {getattr(field, 'help_text', '') or ''} {getattr(field, 'validation_error', '') or ''}".lower()
+                        is_inr_comp = any(w in comb_text for w in ["in inr", "inr", "annual", "larger than 100", "200000", "350000", "rupees", "rupee"])
+                        if is_inr_comp and any(w in comb_text for w in ["ctc", "salary", "compensation"]):
+                            try:
+                                val_f = float(fill_val)
+                                if 0 < val_f <= 100:
+                                    fill_val = str(int(round(val_f * 100000)))
+                            except ValueError:
+                                pass
 
                     await loc.scroll_into_view_if_needed()
                     await loc.click()
@@ -793,6 +823,34 @@ class EasyApplyModal(BasePage):
                     return lines[0]
 
         return "Unlabeled Input"
+
+    async def _find_help_text_for_element(self, locator: Locator) -> Optional[str]:
+        """Finds helper, example, or sub-label text associated with a form control."""
+        try:
+            grouping = locator.locator("xpath=ancestor::div[contains(@class, 'fb-dash-form-element') or contains(@class, 'jobs-easy-apply-form-section__grouping') or contains(@class, 'artdeco-text-input') or contains(@class, 'artdeco-dropdown')][1]")
+            if await grouping.count() > 0:
+                sub_label = grouping.locator("span.fb-dash-form-element__sub-label, p.fb-dash-form-element__sub-label, .artdeco-text-input--help-text, .t-12.t-black--light").first
+                if await sub_label.count() > 0 and await sub_label.is_visible():
+                    txt = (await sub_label.inner_text()).strip()
+                    if txt:
+                        return txt
+        except Exception:
+            pass
+        return None
+
+    async def _find_error_for_element(self, locator: Locator) -> Optional[str]:
+        """Finds inline validation error message for a specific form control."""
+        try:
+            grouping = locator.locator("xpath=ancestor::div[contains(@class, 'fb-dash-form-element') or contains(@class, 'jobs-easy-apply-form-section__grouping') or contains(@class, 'artdeco-text-input') or contains(@class, 'artdeco-dropdown')][1]")
+            if await grouping.count() > 0:
+                err_loc = grouping.locator("div.artdeco-inline-feedback--error:visible, p.artdeco-inline-feedback__message:visible, span.artdeco-inline-feedback__message:visible, [data-test-form-element-error-messages]:visible").first
+                if await err_loc.count() > 0 and await err_loc.is_visible():
+                    txt = (await err_loc.inner_text()).strip()
+                    if txt:
+                        return txt
+        except Exception:
+            pass
+        return None
 
     async def get_field_current_value(self, field: FormField) -> Optional[str]:
         """Reads the live current value for a given field from the modal."""

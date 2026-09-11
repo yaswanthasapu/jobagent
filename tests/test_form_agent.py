@@ -474,3 +474,167 @@ async def test_form_agent_skill_experience_range_options(tmp_path, profile: Cand
     assert needs_hitl is False
 
 
+@pytest.mark.asyncio
+async def test_form_agent_stakeholder_communication_uses_zero(form_agent: FormAgent, profile: CandidateProfile):
+    # 1. Radio / Select with 'Practical use' option
+    field_radio = FormField(
+        field_id="stakeholder_comm_radio",
+        label="Please respond truthfully. What level of professional experience do you have working directly with clients or stakeholders to communicate testing progress, risks, defects and release readiness?",
+        field_type=FormFieldType.RADIO,
+        options=[
+            "None",
+            "Limited exposure",
+            "Practical use — I have professionally communicated testing progress, risks, defects and release readiness to stakeholders or external clients.",
+            "Extensive use"
+        ]
+    )
+    ans_radio, _ = await form_agent.resolve_field_value(field_radio, profile)
+    assert ans_radio == "None"
+
+    # 2. Options with '0 value'
+    field_zero_val = FormField(
+        field_id="comm_0_val",
+        label="communicating testing progress, risks, defects and release readiness to stakeholders or external clients",
+        field_type=FormFieldType.SELECT,
+        options=[
+            "0 value",
+            "Practical use — I have professionally communicated testing progress, risks, defects and release readiness to stakeholders or external clients."
+        ]
+    )
+    ans_zero, _ = await form_agent.resolve_field_value(field_zero_val, profile)
+    assert ans_zero == "0 value"
+
+    # 3. Free text / number question
+    field_text = FormField(
+        field_id="comm_text",
+        label="How many years of experience do you have communicating testing progress, risks, defects and release readiness to stakeholders or external clients?",
+        field_type=FormFieldType.TEXT
+    )
+    ans_text, _ = await form_agent.resolve_field_value(field_text, profile)
+    assert ans_text == "0"
+
+
+@pytest.mark.asyncio
+async def test_form_agent_ctc_inr_examples_and_notice_period(form_agent: FormAgent, profile: CandidateProfile):
+    # 1. Current CTC in INR with Example
+    cur_field = FormField(
+        field_id="cur_ctc_inr",
+        label="Please enter your current ctc in INR",
+        help_text="Please enter your current annual compensation in INR. Example: 200000",
+        field_type=FormFieldType.TEXT
+    )
+    cur_val, _ = await form_agent.resolve_field_value(cur_field, profile)
+    assert cur_val in ["890000", "898600", "899000", "900000"]
+
+    # 2. Expected CTC in INR with Example
+    exp_field = FormField(
+        field_id="exp_ctc_inr",
+        label="Please enter your expected ctc in INR",
+        help_text="Please enter your expected annual compensation in INR. Example: 350000",
+        field_type=FormFieldType.TEXT
+    )
+    exp_val, _ = await form_agent.resolve_field_value(exp_field, profile)
+    assert exp_val in ["1200000", "1500000"]
+
+    # 3. Notice period in days with Example: 45
+    notice_field = FormField(
+        field_id="notice_in_days",
+        label="Please enter your notice period in days. Example: 45",
+        field_type=FormFieldType.TEXT
+    )
+    notice_val, _ = await form_agent.resolve_field_value(notice_field, profile)
+    assert notice_val == "60"
+
+
+@pytest.mark.asyncio
+async def test_form_agent_error_based_ctc_recovery(form_agent: FormAgent, profile: CandidateProfile):
+    # Field with validation error "Enter a whole number larger than 100"
+    err_field = FormField(
+        field_id="ctc_with_err",
+        label="Please enter your current ctc in INR",
+        current_value="8.99",
+        validation_error="Enter a whole number larger than 100",
+        field_type=FormFieldType.TEXT
+    )
+    res_val, _ = await form_agent.resolve_field_value(err_field, profile)
+    assert res_val in ["890000", "898600", "899000", "900000"]
+    assert float(res_val) > 100
+
+
+@pytest.mark.asyncio
+async def test_form_agent_new_reported_questions(form_agent: FormAgent, profile: CandidateProfile):
+    # 1. Typescript / Javascript experience
+    ts_field = FormField(
+        field_id="ts_js_exp",
+        label="How many years of work experience do you have with Typescript or JavaScript?",
+        field_type=FormFieldType.TEXT
+    )
+    val_ts, _ = await form_agent.resolve_field_value(ts_field, profile)
+    assert float(val_ts) >= 1.5
+    assert val_ts not in ["Yes", "No"]
+
+    # 2. CI/CD experience
+    cicd_field = FormField(
+        field_id="cicd_exp",
+        label="How many years of work experience do you have with CI/CD?",
+        field_type=FormFieldType.TEXT
+    )
+    val_cicd, _ = await form_agent.resolve_field_value(cicd_field, profile)
+    assert float(val_cicd) >= 1.5
+    assert "Limited exposure" not in val_cicd
+
+    # 3. Face to Face round in Hyderabad
+    f2f_field = FormField(
+        field_id="f2f_round",
+        label="Are you ready to come for Face to Face round at Hyderabad location?Are you ready to come for Face to Face round at Hyderabad location?",
+        field_type=FormFieldType.SELECT,
+        options=["Select an option", "Yes", "No"]
+    )
+    val_f2f, _ = await form_agent.resolve_field_value(f2f_field, profile)
+    assert val_f2f == "Yes"
+
+    # 4. Current CTC with one or two digits
+    ctc_cur_field = FormField(
+        field_id="ctc_cur_digits",
+        label="What is your current CTC? (Please enter your CTC in LPA using one or two digits, e.g., 6 or 8.)",
+        field_type=FormFieldType.TEXT
+    )
+    val_ctc_cur, _ = await form_agent.resolve_field_value(ctc_cur_field, profile)
+    assert val_ctc_cur in ["9", "8"]
+
+    # 5. Expected CTC with one or two digits
+    ctc_exp_field = FormField(
+        field_id="ctc_exp_digits",
+        label="What is your expected CTC? (Please enter your CTC in LPA using one or two digits, e.g., 6 or 8.)",
+        field_type=FormFieldType.TEXT
+    )
+    val_ctc_exp, _ = await form_agent.resolve_field_value(ctc_exp_field, profile)
+    assert val_ctc_exp in [str(int(round(profile.professional.expected_lpa))), "15", "12"]
+
+    # 6. How soon can you join in days
+    join_field = FormField(
+        field_id="join_days",
+        label="How soon can you join? (Please mention the number of days. If you are an immediate joiner, enter 0.)",
+        field_type=FormFieldType.TEXT
+    )
+    val_join, _ = await form_agent.resolve_field_value(join_field, profile)
+    assert val_join == "60"
+    assert val_join != "No"
+
+
+@pytest.mark.asyncio
+async def test_form_agent_memory_numeric_guard(form_agent: FormAgent, profile: CandidateProfile):
+    # Simulate bad entry in memory returning "Yes" for a numeric label
+    form_agent.memory_service.save_form_answer("how many years of work experience do you have with typescript or javascript", "Yes", "text")
+    
+    field = FormField(
+        field_id="ts_check",
+        label="How many years of work experience do you have with Typescript or JavaScript?",
+        field_type=FormFieldType.NUMBER
+    )
+    val, _ = await form_agent.resolve_field_value(field, profile)
+    assert val != "Yes"
+    assert float(val) > 0.0
+
+
+

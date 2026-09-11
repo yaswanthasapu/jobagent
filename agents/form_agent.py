@@ -129,29 +129,85 @@ class FormAgent:
         answers in persistent memory before falling back to dynamic resolution.
         """
         label_lower = field.label.lower()
+        # 0A. Top Priority Rule: Stakeholder / External Client Communication: Use 0 value (never 'Practical use')
+        if any(phrase in label_lower for phrase in [
+            "communicated testing progress",
+            "communicating testing progress",
+            "release readiness to stakeholders",
+            "testing progress, risks, defects",
+            "stakeholders or external clients"
+        ]):
+            if field.options:
+                zero_opt = self._find_option_matching(field.options, [
+                    "0", "0 value", "none", "no experience", "0 - none", "no", "0 years", "limited exposure"
+                ])
+                if zero_opt:
+                    return zero_opt, False
+                for opt in field.options:
+                    if re.search(r'\b0\b', opt.lower()):
+                        return opt, False
+                return field.options[0], False
+            return "0", False
 
-        # 0. Check persistent memory for previously answered question from profile/past sessions
+        # 0B. Check persistent memory for previously answered question from profile/past sessions
         # Memory Safeguard: Never reuse memory answers if question is about immediate joining
         is_immediate_q = any(w in label_lower for w in ["immediate joiner", "join immediately", "immediate joining", "available to join immediately"])
         saved_val = None if is_immediate_q else self.memory_service.get_form_answer(field.label)
         if saved_val is not None and str(saved_val).strip() != "":
             saved_str = str(saved_val).strip()
-            if field.options:
-                for opt in field.options:
-                    if saved_str.lower() == opt.lower() or saved_str.lower() in opt.lower():
-                        return opt, False
-                decl = self._find_decline_or_privacy_option(field.options)
-                if decl and any(p in saved_str.lower() for p in ["prefer not", "decline"]):
-                    return decl, False
-            else:
-                if field.field_type == FormFieldType.NUMBER or any(k in label_lower for k in [
-                    "year", "experience", "how many", "ctc", "salary", "notice",
-                    "days", "months", "lakh", "lpa", "total it", "decimal"
-                ]):
-                    m = re.search(r'(\d+(?:\.\d+)?)', saved_str)
-                    if m:
-                        saved_str = m.group(1)
-                return saved_str, False
+
+            is_numeric_field = (
+                field.field_type == FormFieldType.NUMBER
+                or (
+                    any(k in label_lower for k in [
+                        "how many", "years", "experience", "how soon", "ctc", "salary",
+                        "compensation", "notice", "days", "months", "lakh", "lpa", "decimal", "whole number"
+                    ])
+                    and not any(bin_kw in label_lower for bin_kw in ["do you have", "are you", "can you", "will you", "have you", "yes/no"])
+                )
+            )
+
+            # If question is numeric, saved answer MUST contain digits and not be Yes/No
+            if is_numeric_field and not field.options:
+                if not re.search(r'\d', saved_str) or saved_str.lower() in ["yes", "no", "true", "false"]:
+                    saved_val = None
+                    saved_str = ""
+
+            if saved_val is not None and saved_str:
+                # Safeguard: If question asks for INR / annual whole number but memory has LPA decimal <= 100
+                is_inr_q = any(w in label_lower for w in ["in inr", "inr", "annual", "larger than 100", "200000", "350000", "rupees", "rupee"])
+                if is_inr_q and any(w in label_lower for w in ["ctc", "salary", "compensation"]):
+                    try:
+                        num_chk = float(re.sub(r'[^\d.]', '', saved_str))
+                        if 0 < num_chk <= 100:
+                            saved_str = str(int(round(num_chk * 100000)))
+                    except (ValueError, TypeError):
+                        pass
+
+                # Safeguard: If question asks for CTC in LPA using one or two digits, e.g. 6 or 8
+                if any(w in label_lower for w in ["one or two digits", "single digit", "e.g., 6 or 8", "e.g. 6 or 8", "e.g. 6", "e.g., 6"]):
+                    try:
+                        num_chk = float(re.sub(r'[^\d.]', '', saved_str))
+                        if 0 < num_chk <= 100:
+                            saved_str = str(int(round(num_chk)))
+                    except (ValueError, TypeError):
+                        pass
+
+                if field.options:
+                    for opt in field.options:
+                        if saved_str.lower() == opt.lower() or saved_str.lower() in opt.lower():
+                            return opt, False
+                    decl = self._find_decline_or_privacy_option(field.options)
+                    if decl and any(p in saved_str.lower() for p in ["prefer not", "decline"]):
+                        return decl, False
+                else:
+                    if is_numeric_field:
+                        m = re.search(r'(\d+(?:\.\d+)?)', saved_str)
+                        if m:
+                            saved_str = m.group(1)
+                            return saved_str, False
+                    else:
+                        return saved_str, False
 
         val, needs_hitl = await self._resolve_internal(field, profile, job_description)
 
@@ -172,8 +228,25 @@ class FormAgent:
         job_description: Optional[str] = None
     ) -> Tuple[str, bool]:
         label_lower = field.label.lower()
+        help_txt = (getattr(field, "help_text", "") or "").lower()
+        val_err = (getattr(field, "validation_error", "") or "").lower()
+        combined_text = f"{label_lower} {help_txt} {val_err}".strip()
 
-        # 0. Immediate Joiner / Availability: Candidate has 60 days notice! NEVER answer Yes.
+        # 0A. Notice Period / How soon can you join in days (e.g. "How soon can you join? (Please mention the number of days...)")
+        if any(phrase in label_lower for phrase in [
+            "how soon can you join", "how soon", "number of days", "mention the number of days",
+            "notice period in days", "notice in days", "notice period (in days)", "joining in days"
+        ]):
+            days = profile.professional.notice_period_days  # 60
+            if field.options:
+                for opt in field.options:
+                    opt_l = opt.lower()
+                    if str(days) in opt_l or "60 days" in opt_l or "2 months" in opt_l:
+                        return opt, False
+                return field.options[0], False
+            return str(days), False
+
+        # 0B. Immediate Joiner / Availability: Candidate has 60 days notice! NEVER answer Yes.
         if any(phrase in label_lower for phrase in [
             "immediate joiner", "join immediately", "immediate joining",
             "can you join immediately", "available to join immediately",
@@ -187,7 +260,22 @@ class FormAgent:
                     if any(k in opt.lower() for k in ["60", "2 months", "standard", "serving notice", "more than 30"]):
                         return opt, False
                 return field.options[-1], False
+            if field.field_type == FormFieldType.NUMBER or any(k in label_lower for k in ["days", "number", "how many", "decimal"]):
+                return str(profile.professional.notice_period_days), False
             return "No", False
+
+        # 0C. Face-to-Face / In-Person Interviews & Rounds: Candidate is in Hyderabad and always ready to attend
+        if any(phrase in label_lower for phrase in [
+            "face to face", "f2f", "in-person", "in person", "offline round",
+            "offline interview", "walk-in", "walk in", "come for round",
+            "attend interview", "f2f round", "face to face round"
+        ]):
+            if field.options:
+                yes_opt = self._find_option_matching(field.options, ["yes", "ready", "available", "agree", "willing"])
+                if yes_opt:
+                    return yes_opt, False
+                return field.options[0], False
+            return "Yes", False
 
         # 1. Demographic & Voluntary EEO Self-Identification (Race, Ethnicity, Gender, Disability, Veteran)
         if any(w in label_lower for w in ["race", "ethnicity", "ethnic origin", "demographic"]):
@@ -290,7 +378,33 @@ class FormAgent:
                 digits = digits[2:]
             return digits, False
 
-        if "city" in label_lower or "location" in label_lower or "address" in label_lower:
+        # City / Current Location / Address (excluding interview questions, work mode questions, and Yes/No questions)
+        is_location_q = (
+            "city" in label_lower
+            or "address" in label_lower
+            or "current location" in label_lower
+            or "your location" in label_lower
+            or "residing in" in label_lower
+            or "where are you based" in label_lower
+            or (
+                "location" in label_lower
+                and not any(term in label_lower for term in [
+                    "face to face", "f2f", "round", "interview", "ready to come", "come for",
+                    "commute", "commuting", "relocate", "relocating", "onsite", "hybrid", "remote",
+                    "are you", "do you", "can you", "will you", "would you", "is it ok", "comfortable"
+                ])
+            )
+        )
+        if is_location_q:
+            if field.options:
+                matched_loc = self._find_option_matching(field.options, ["hyderabad", "telangana", "india"])
+                if matched_loc:
+                    return matched_loc, False
+                if any(opt.strip().lower() in ["yes", "no"] for opt in field.options):
+                    for opt in field.options:
+                        if opt.strip().lower() == "yes":
+                            return opt, False
+                    return field.options[0], False
             return profile.personal.location, False
 
         # 3. Professional & Company
@@ -301,25 +415,61 @@ class FormAgent:
             return profile.professional.designation, False
 
         # 4. CTC & Compensation (Handles INR raw numbers, LPA/Lakhs, and salary expectations)
-        if any(phrase in label_lower for phrase in [
-            "expected ctc", "expected salary", "salary expectations", "expected compensation", "expected annual compensation"
+        if any(phrase in combined_text for phrase in [
+            "expected ctc", "expected salary", "salary expectations", "expected compensation",
+            "expected annual compensation", "desired compensation", "salary expectation"
         ]):
             exp_lpa = profile.professional.expected_lpa
             exp_inr = int(exp_lpa * 100000)
-            if any(w in label_lower for w in ["lakh", "lakhs", "lpa", "lac"]):
+            if "month" in combined_text:
+                return str(int(exp_inr / 12)), False
+
+            # Prompt asking for CTC in LPA using one or two digits, e.g. 6 or 8
+            if any(w in combined_text for w in ["one or two digits", "single digit", "e.g., 6 or 8", "e.g. 6 or 8", "e.g. 6", "e.g., 6"]):
+                return str(int(round(exp_lpa))), False
+
+            needs_inr = (
+                any(w in combined_text for w in [
+                    "in inr", "inr", "annual", "larger than 100", "350000", "200000", "rupees", "rupee", "whole number"
+                ])
+                or "larger than 100" in val_err
+            )
+            is_lakhs = (
+                any(w in combined_text for w in ["lakh", "lakhs", "lpa", "lac"])
+                and not needs_inr
+            )
+            if is_lakhs:
                 return str(int(exp_lpa)) if exp_lpa.is_integer() else str(exp_lpa), False
-            if "inr" in label_lower or "annual" in label_lower:
+            if needs_inr:
                 return str(exp_inr), False
             return str(int(exp_lpa)) if exp_lpa.is_integer() else str(exp_lpa), False
 
-        if any(phrase in label_lower for phrase in [
+        if any(phrase in combined_text for phrase in [
             "current ctc", "current salary", "current compensation", "current annual compensation"
         ]):
             cur_lpa = profile.professional.current_lpa
-            cur_inr = int(cur_lpa * 100000)
-            if any(w in label_lower for w in ["lakh", "lakhs", "lpa", "lac"]):
+            prefs_inr = self.memory_service.get_preference("current_ctc_inr")
+            cur_inr = int(prefs_inr) if prefs_inr else int(cur_lpa * 100000)
+            if "month" in combined_text:
+                return str(int(cur_inr / 12)), False
+
+            # Prompt asking for CTC in LPA using one or two digits, e.g. 6 or 8
+            if any(w in combined_text for w in ["one or two digits", "single digit", "e.g., 6 or 8", "e.g. 6 or 8", "e.g. 6", "e.g., 6"]):
+                return str(int(round(cur_lpa))), False
+
+            needs_inr = (
+                any(w in combined_text for w in [
+                    "in inr", "inr", "annual", "larger than 100", "200000", "350000", "rupees", "rupee", "whole number"
+                ])
+                or "larger than 100" in val_err
+            )
+            is_lakhs = (
+                any(w in combined_text for w in ["lakh", "lakhs", "lpa", "lac"])
+                and not needs_inr
+            )
+            if is_lakhs:
                 return str(int(cur_lpa)) if cur_lpa.is_integer() else str(cur_lpa), False
-            if "inr" in label_lower or "annual" in label_lower:
+            if needs_inr:
                 return str(cur_inr), False
             return str(int(cur_lpa)) if cur_lpa.is_integer() else str(cur_lpa), False
 
@@ -373,7 +523,10 @@ class FormAgent:
             return "Bachelor's Degree", False
 
         # 8. Notice Period (Days, Weeks, Months)
-        if "notice period" in label_lower or "notice" in label_lower:
+        if any(phrase in combined_text for phrase in [
+            "notice period", "notice in days", "notice (days)", "notice period in days",
+            "notice period (in days)", "how soon can you join"
+        ]) or ("notice" in combined_text and any(w in combined_text for w in ["days", "period", "joining", "example"])):
             days = profile.professional.notice_period_days # 60
             if field.options:
                 # Find best matching option
@@ -389,9 +542,9 @@ class FormAgent:
                         return opt, False
                 return field.options[0], False
 
-            if "week" in label_lower:
+            if "week" in combined_text:
                 return str(round(days / 7)), False # "8" or "9"
-            if "month" in label_lower:
+            if "month" in combined_text:
                 return str(round(days / 30)), False # "2"
             return str(days), False # "60"
 
@@ -668,10 +821,20 @@ class FormAgent:
         # "What level of professional experience do you have developing, executing and maintaining automated test suites..."
         # Options: "Limited exposure", "Practical use", "Extensive use"
         if any(w in label_lower for w in ["level of professional experience", "level of experience", "what level of"]) and field.options:
+            is_comm = any(w in label_lower for w in [
+                "stakeholder", "external client", "communicated testing progress",
+                "communicating testing progress", "release readiness", "clients"
+            ])
+            if is_comm:
+                zero_opt = self._find_option_matching(field.options, ["0", "0 value", "none", "no experience", "0 - none", "no", "limited exposure"])
+                if zero_opt:
+                    return zero_opt, False
+                return field.options[0], False
+
             is_core_qa = any(w in label_lower for w in [
                 "automated test", "test automation", "testing", "test strategies", "test plans",
-                "git", "version control", "api", "apis", "defect", "debugging", "clients",
-                "stakeholders", "software", "quality", "ci/cd", "pipeline"
+                "git", "version control", "api", "apis", "defect", "debugging",
+                "software", "quality", "ci/cd", "pipeline"
             ])
             if is_core_qa:
                 # Candidate has 4 years of solid QA automation experience
@@ -775,8 +938,8 @@ class FormAgent:
         # 4. Secondary Programming / Scripting Languages:
         if any(term in skill_clean for term in ["javascript", "typescript", "playwright"]):
             has_js = any(any(k in s.lower() for k in ["javascript", "typescript", "playwright"]) for s in profile.skills)
-            if has_js or (self.resume_text and re.search(r'\b(javascript|playwright)\b', self.resume_text, re.I)):
-                return min(1.5, total_exp) if total_exp > 0 else 0.0
+            if has_js or (self.resume_text and re.search(r'\b(javascript|playwright|typescript)\b', self.resume_text, re.I)):
+                return min(2.0, total_exp) if total_exp > 0 else 0.0
             return 0.0
 
         # 5. Version Control & Agile Management Tools:
