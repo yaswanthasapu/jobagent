@@ -29,26 +29,59 @@ Equipped with a **Web UI Control Center**, **Interactive Conversational AI Chat*
 >
 > 5. **Candidate Profile as Single Source of Truth**:
 >    During the first-time setup wizard, JobAgent parses your resume PDF, extracts your technical skills, experience, designation, and target roles, and saves your profile to `candidate_profile.json`. You can update your resume PDF anytime via Option `[8]` or edit preferences via Option `[7]`.
+>
+> 6. **Multi-User Privacy & Data Isolation**:
+>    JobAgent is completely user-agnostic and privacy-first. There are zero hardcoded personal details, phone numbers, or employer names in the shared source code. Every user gets an isolated local profile, local browser context, and application database.
 
 ---
 
-## 🚀 Quick Start (Under 60 Seconds)
+## 🚀 Quick Start Guide
 
-### 1. Install via pip
-```bash
-pip install --upgrade jobagent
-```
+### Option A: Install from GitHub (Source)
 
-### 2. Launch JobAgent
-Run in any terminal (PowerShell, Command Prompt, macOS/Linux Terminal):
 ```bash
+# 1. Clone the repository
+git clone https://github.com/yaswanthasapu/jobagent.git
+cd jobagent
+
+# 2. Create and activate a virtual environment
+# Windows (PowerShell):
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# macOS / Linux:
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies & CLI tool
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install -e .
+
+# 4. Install Playwright browser
+playwright install chromium
+
+# 5. Launch the agent
 jobagent
 ```
 
-On your first run:
-1. JobAgent guides you through an onboarding wizard to configure your resume, target roles, location, and CTC preferences.
-2. Select Option **`[1]`** to log into your LinkedIn / Naukri accounts once.
-3. Select Option **`[2]`** to start applying, Option **`[5]`** to launch the Web UI Dashboard, or Option **`[3]`** to chat with the agent!
+### Option B: Install via pip (PyPI)
+
+```bash
+pip install --upgrade jobagent
+jobagent
+```
+
+---
+
+## ⚙️ First-Time Onboarding Flow
+
+On your first run (`jobagent` or `python main.py`):
+1. **API Key Setup**: Free Google Gemini API Key (or OpenAI Key) saved permanently to your local `.env`.
+2. **Resume Extraction**: Enter path to your resume PDF. The agent dynamically parses your skills, experience, designation, and suggests target roles.
+3. **Review & Confirm**: Review and confirm your details (CTC, notice period, preferred locations).
+4. **Platform Sign-In**: Choose Option **`[1]`** to log into LinkedIn & Naukri once in the visible browser. Session cookies are permanently saved.
+5. **Start Applying**: Choose Option **`[2]`** to apply, Option **`[5]`** for the Web Dashboard, or Option **`[3]`** for AI chat!
 
 ---
 

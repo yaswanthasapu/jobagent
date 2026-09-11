@@ -54,7 +54,8 @@ openai = ["openai>=1.0.0"]
 all = ["google-genai>=0.1.0", "openai>=1.0.0"]
 
 [project.urls]
-Homepage = "https://github.com/yaswanth901/jobagent"
+Homepage = "https://github.com/yaswanthasapu/jobagent"
+Repository = "https://github.com/yaswanthasapu/jobagent.git"
 
 [project.scripts]
 jobagent = "main:main"
