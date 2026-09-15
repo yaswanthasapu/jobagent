@@ -650,6 +650,12 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 5. Assemble CandidateProfile
         profile = CandidateProfile(
+            name=name,
+            current_role=designation,
+            experience_years=exp_years,
+            current_ctc_lpa=cur_lpa,
+            expected_ctc_lpa=exp_lpa,
+            notice_period_days=notice_days,
             personal=PersonalInfo(full_name=name, email=email, phone=phone, location=location),
             professional=ProfessionalInfo(
                 designation=designation,
@@ -660,6 +666,7 @@ Return ONLY a strictly valid JSON object with schema:
                 notice_period_days=notice_days
             ),
             skills=skills,
+            target_roles=preferred_roles,
             preferred_roles=preferred_roles,
             preferred_locations=preferred_locations,
             job_preferences=JobPreferences(minimum_match_score=60.0, easy_apply_only=True, require_human_approval=True)

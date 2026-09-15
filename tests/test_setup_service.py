@@ -62,3 +62,45 @@ def test_parse_resume_empty_file(tmp_path: Path):
     assert parsed["suggested_target_roles"] == []
     assert parsed["current_ctc_inr"] is None
     assert parsed["expected_ctc_inr"] is None
+
+def test_candidate_profile_preserves_nested_info(tmp_path: Path, monkeypatch):
+    from models.profile import CandidateProfile, PersonalInfo, ProfessionalInfo
+    profile = CandidateProfile(
+        personal=PersonalInfo(
+            full_name="Veera Venkata Satyanarayana Rangina",
+            email="satyanarayanarangina@gmail.com",
+            phone="9121604072",
+            location="Hyderabad, India"
+        ),
+        professional=ProfessionalInfo(
+            designation="Senior Software Engineer",
+            total_experience_years=4.0,
+            current_company="Magellanic Cloud Pvt Ltd",
+            current_lpa=21.0,
+            expected_lpa=27.3,
+            notice_period_days=60
+        ),
+        skills=["Java", "Spring Boot", "React JS"],
+        preferred_roles=["Senior Software Engineer", "Full Stack Developer"]
+    )
+    
+    assert profile.name == "Veera Venkata Satyanarayana Rangina"
+    assert profile.personal.full_name == "Veera Venkata Satyanarayana Rangina"
+    assert profile.personal.phone == "9121604072"
+    assert profile.personal.email == "satyanarayanarangina@gmail.com"
+    assert profile.current_role == "Senior Software Engineer"
+    assert profile.professional.designation == "Senior Software Engineer"
+    assert profile.experience_years == 4.0
+    assert profile.professional.total_experience_years == 4.0
+    assert profile.current_ctc_lpa == 21.0
+    assert profile.expected_ctc_lpa == 27.3
+    assert profile.notice_period_days == 60
+    assert profile.professional.notice_period_days == 60
+
+    # Test JSON dump & reload
+    profile_file = tmp_path / "test_p.json"
+    profile_file.write_text(profile.model_dump_json(indent=2), encoding="utf-8")
+    
+    service = SetupService()
+    monkeypatch.setattr(SetupService, "profile_path", property(lambda s: profile_file))
+    assert service.has_configured_profile() is True

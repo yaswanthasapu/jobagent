@@ -49,22 +49,35 @@ class CandidateProfile(BaseModel):
     @classmethod
     def sync_fields(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            personal_dict = data.get("personal", {}) if isinstance(data.get("personal"), dict) else {}
-            prof_dict = data.get("professional", {}) if isinstance(data.get("professional"), dict) else {}
+            raw_personal = data.get("personal")
+            if hasattr(raw_personal, "model_dump"):
+                personal_dict = raw_personal.model_dump()
+            elif isinstance(raw_personal, dict):
+                personal_dict = dict(raw_personal)
+            else:
+                personal_dict = {}
+
+            raw_prof = data.get("professional")
+            if hasattr(raw_prof, "model_dump"):
+                prof_dict = raw_prof.model_dump()
+            elif isinstance(raw_prof, dict):
+                prof_dict = dict(raw_prof)
+            else:
+                prof_dict = {}
 
             name = personal_dict.get("full_name") or data.get("name")
             current_role = prof_dict.get("designation") or data.get("current_role")
             
             exp = prof_dict.get("total_experience_years")
-            if exp is None:
+            if exp is None or (isinstance(exp, (int, float)) and exp == 0.0 and data.get("experience_years") is not None and data.get("experience_years") > 0):
                 exp = data.get("experience_years")
             
             c_lpa = prof_dict.get("current_lpa")
-            if c_lpa is None:
+            if c_lpa is None or (isinstance(c_lpa, (int, float)) and c_lpa == 0.0 and data.get("current_ctc_lpa") is not None and data.get("current_ctc_lpa") > 0):
                 c_lpa = data.get("current_ctc_lpa")
                 
             e_lpa = prof_dict.get("expected_lpa")
-            if e_lpa is None:
+            if e_lpa is None or (isinstance(e_lpa, (int, float)) and e_lpa == 0.0 and data.get("expected_ctc_lpa") is not None and data.get("expected_ctc_lpa") > 0):
                 e_lpa = data.get("expected_ctc_lpa")
                 
             np_days = prof_dict.get("notice_period_days")
