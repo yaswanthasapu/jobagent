@@ -30,7 +30,7 @@ STATIC_DIR = BASE_DIR / "static"
 app = FastAPI(
     title="JobAgent Control Center",
     description="Professional Web Dashboard & Real-Time Monitoring for JobAgent",
-    version="1.0.29"
+    version="1.0.30"
 )
 
 # Mount static files
@@ -340,13 +340,15 @@ async def get_resume_review():
     except Exception as e:
         logger.error(f"Resume review error: {e}")
         profile = ProfileLoader.get_instance().profile
+        top_skills = profile.skills[:5] if profile and profile.skills else ["Software Development"]
+        title = (profile.professional.designation if profile else None) or (profile.current_role if profile else None) or "Software Professional"
         return {
             "has_resume": True,
-            "score": 85,
-            "summary": "Candidate profile contains strong test automation expertise in Selenium, Java, and Playwright.",
-            "strengths": ["Strong Core Java foundation", "Selenium WebDriver & Playwright automation", "CI/CD & Jenkins experience"],
-            "improvements": ["Highlight cloud platforms (AWS/Azure)", "Add quantifiable defect reduction metrics"],
-            "missing_keywords": ["Docker", "Kubernetes", "AWS", "Grafana"],
+            "score": 80,
+            "summary": f"Candidate profile reflects background in {title} with expertise in {', '.join(top_skills)}.",
+            "strengths": [f"Technical proficiency in {s}" for s in top_skills[:3]],
+            "improvements": ["Incorporate quantifiable project impact and defect reduction metrics", "Highlight cloud platform competencies and architecture certifications"],
+            "missing_keywords": ["Cloud Infrastructure", "System Architecture", "Performance Tuning"],
             "detected_skills": profile.skills[:25] if profile else []
         }
 
@@ -401,13 +403,14 @@ async def upload_resume(file: UploadFile = File(...)):
                     cand_profile.current_role = parsed["designation"]
                 if parsed.get("current_company"):
                     cand_profile.professional.current_company = parsed["current_company"]
-                if parsed.get("total_experience_years"):
+                if parsed.get("total_experience_years") is not None:
                     cand_profile.professional.total_experience_years = float(parsed["total_experience_years"])
                     cand_profile.experience_years = float(parsed["total_experience_years"])
                 if parsed.get("skills"):
-                    for s in parsed["skills"]:
-                        if s not in cand_profile.skills:
-                            cand_profile.skills.append(s)
+                    cand_profile.skills = list(parsed["skills"])
+                if parsed.get("suggested_target_roles"):
+                    cand_profile.preferred_roles = list(parsed["suggested_target_roles"])
+                    cand_profile.target_roles = list(parsed["suggested_target_roles"])
                 with open(prof_path, "w", encoding="utf-8") as f:
                     f.write(cand_profile.model_dump_json(indent=2))
                 ProfileLoader.reset()

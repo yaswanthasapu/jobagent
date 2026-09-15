@@ -221,9 +221,11 @@ class ChatAgent:
         is_search = any(w in msg_lower for w in ["search", "apply", "find", "look for", "hunt", "run application"])
         if is_search and not any(w in msg_lower for w in ["how to search", "where to search"]):
             platform = "all"
-            if "linkedin" in msg_lower and "naukri" not in msg_lower:
+            has_linkedin = any(w in msg_lower for w in ["linkedin", "linked in", "linked", "linkdin"])
+            has_naukri = any(w in msg_lower for w in ["naukri", "naukari", "naukri.com"])
+            if has_linkedin and not has_naukri:
                 platform = "linkedin"
-            elif "naukri" in msg_lower and "linkedin" not in msg_lower:
+            elif has_naukri and not has_linkedin:
                 platform = "naukri"
 
             date_posted = "24h"
@@ -248,23 +250,35 @@ class ChatAgent:
 
             # Extract location
             location = None
-            for loc in ["hyderabad", "bangalore", "bengaluru", "pune", "mumbai", "delhi", "chennai", "noida", "gurgaon"]:
+            for loc in ["hyderabad", "bangalore", "bengaluru", "pune", "mumbai", "delhi", "chennai", "noida", "gurgaon", "kolkata", "ahmedabad", "kochi", "trivandrum", "coimbatore", "chandigarh", "jaipur", "remote", "india"]:
                 if loc in msg_lower:
-                    location = loc.capitalize()
+                    location = "Bangalore" if loc == "bengaluru" else loc.capitalize()
                     break
 
             # Extract role/keyword if mentioned
             keyword = None
-            role_matches = [
-                "sdet", "qa automation engineer", "qa lead", "qa engineer",
-                "automation engineer", "test engineer", "software engineer",
-                "frontend engineer", "backend engineer", "fullstack engineer",
-                "devops engineer", "data engineer", "data scientist"
-            ]
-            for r in role_matches:
-                if r in msg_lower:
-                    keyword = r.title()
-                    break
+            kw_match = re.search(r'(?:search(?:\s+for)?|find|apply(?:\s+to)?|look\s+for|hunt\s+for)\s+(.+?)\s+(?:jobs?|openings?|roles?|positions?)', msg_lower)
+            if kw_match:
+                extracted_kw = kw_match.group(1).strip()
+                clean_kw = re.sub(r'^(?:remote|hybrid|onsite|on-site)\s+', '', extracted_kw, flags=re.I).strip()
+                clean_kw = re.sub(r'\s+(?:in|at|on|for|with|posted|remote)\b.*$', '', clean_kw, flags=re.I).strip()
+                if clean_kw and len(clean_kw) > 1:
+                    keyword = clean_kw.title()
+
+            if not keyword:
+                role_matches = [
+                    "qa automation engineer", "qa automation tester", "automation qa engineer",
+                    "fullstack software engineer", "full stack software engineer", "full stack developer",
+                    "fullstack developer", "fullstack engineer", "full stack engineer",
+                    "java backend developer", "java developer", "python developer", "react developer",
+                    "sdet", "qa lead", "qa engineer", "automation engineer", "test engineer",
+                    "software engineer", "frontend engineer", "backend engineer", "cloud engineer",
+                    "devops engineer", "data engineer", "data scientist"
+                ]
+                for r in role_matches:
+                    if r in msg_lower:
+                        keyword = r.title()
+                        break
 
             return {
                 "intent": "search_and_apply",

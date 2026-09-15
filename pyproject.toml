@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobagent"
-version = "1.0.29"
+version = "1.0.30"
 description = "Autonomous Multi-Platform AI Job Application Agent for LinkedIn and Naukri"
 readme = "README.md"
 requires-python = ">=3.10"
