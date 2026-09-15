@@ -180,16 +180,18 @@ class SetupService:
             settings.OPENAI_API_KEY = api_key
 
     def parse_resume_to_dict(self, resume_pdf_path: Path) -> Dict[str, Any]:
-        """Extract text and parse candidate details dynamically from a resume PDF using latest Gemini AI."""
+        """Extract text and parse candidate details dynamically from a resume PDF using latest Gemini AI and heuristics."""
         try:
             reader = pypdf.PdfReader(str(resume_pdf_path))
             raw_pages = [page.extract_text() or "" for page in reader.pages]
             text = "\n".join(raw_pages)
             normalized_text = re.sub(r'\s+', ' ', text).strip()
+            raw_lines = [l.strip() for l in text.split("\n") if l.strip()]
         except Exception as e:
             logger.warning(f"Failed to read PDF text: {e}")
             text = ""
             normalized_text = ""
+            raw_lines = []
 
         # Default fallback structure (no hardcoded roles or salaries)
         parsed: Dict[str, Any] = {
@@ -212,31 +214,114 @@ class SetupService:
             return parsed
 
         # 1. Regex heuristics for fast fallback
-        email_m = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', normalized_text)
+        # Email
+        email_m = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', text)
         if email_m:
-            parsed["email"] = email_m.group(0)
+            parsed["email"] = email_m.group(0).lower().strip()
 
-        phone_m = re.search(r'(?:\+?91[\s-]?)?[6-9]\d{9}', normalized_text)
+        # Phone (Support +91 98765 43210, 98765-43210, (987) 654-3210, etc.)
+        phone_m = re.search(r'(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|(?:\+?1[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}|\b[6-9]\d{9}\b', text)
         if phone_m:
-            clean_p = re.sub(r'\D', '', phone_m.group(0))
-            if clean_p.startswith('91') and len(clean_p) == 12:
-                clean_p = clean_p[2:]
-            parsed["phone"] = clean_p
+            digits = re.sub(r'\D', '', phone_m.group(0))
+            if digits.startswith('91') and len(digits) == 12:
+                digits = digits[2:]
+            elif digits.startswith('1') and len(digits) == 11:
+                digits = digits[1:]
+            if len(digits) == 10:
+                parsed["phone"] = digits
 
-        # Name heuristic from top of resume
-        name_match = re.match(r'^([A-Z\s]{2,30})\b', normalized_text)
-        if name_match:
-            cand_name = " ".join([w.capitalize() for w in name_match.group(1).split() if len(w) > 1])
-            if cand_name:
-                parsed["full_name"] = cand_name
+        # Candidate Name & Current Designation heuristic from top of resume
+        skip_headers = {
+            "curriculum", "vitae", "resume", "cv", "profile", "summary", "contact",
+            "email", "phone", "address", "page", "about", "objective", "career",
+            "personal", "details", "experience", "education", "skills", "hyderabad",
+            "bangalore", "bengaluru", "pune", "chennai", "mumbai", "india", "remote"
+        }
+        cand_name = ""
+        cand_role = ""
+        for i, line in enumerate(raw_lines[:8]):
+            clean = line.strip()
+            lower = clean.lower()
+            if not clean or any(term in lower for term in skip_headers):
+                continue
+            if "@" in clean or "http" in lower or "linkedin" in lower or "github" in lower:
+                continue
+            lead_part = re.split(r'[,|•\t]', clean)[0].strip()
+            words = lead_part.split()
+            if not cand_name:
+                if 2 <= len(words) <= 4 and all(re.match(r'^[A-Za-z\.\'-]+$', w) for w in words):
+                    cand_name = " ".join(w.capitalize() for w in words)
+                    continue
+                elif len(words) == 1 and words[0].isalpha() and i + 1 < len(raw_lines):
+                    next_line = re.split(r'[,|•\t]', raw_lines[i + 1].strip())[0].strip()
+                    next_words = next_line.split()
+                    if len(next_words) == 1 and next_words[0].isalpha() and next_words[0].lower() not in skip_headers:
+                        cand_name = f"{words[0].capitalize()} {next_words[0].capitalize()}"
+                        continue
+            elif not cand_role:
+                if len(clean) <= 60 and any(kw in lower for kw in ["developer", "engineer", "lead", "architect", "manager", "analyst", "tester", "sdet", "consultant", "specialist", "qa"]):
+                    cand_role = clean.strip()
+                    continue
 
-        # Experience heuristic
-        exp_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:\+?\s*)?(?:years|year|yrs|yr)(?:\s+of)?\s+(?:experience|exp)', normalized_text, re.IGNORECASE)
-        if exp_m:
+        if not cand_name:
+            lead_chunk = re.split(r'[,|•\n\r]|(?:\+?\d{1,3}[-\s]?)?[6-9]\d{9}|[a-zA-Z0-9_.+-]+@', normalized_text)[0].strip()
+            words = [w for w in lead_chunk.split() if w.isalpha() and w.lower() not in skip_headers]
+            if 2 <= len(words) <= 4:
+                cand_name = " ".join(w.capitalize() for w in words)
+            elif len(words) > 4:
+                cand_name = " ".join(w.capitalize() for w in words[:2])
+
+        if cand_name:
+            parsed["full_name"] = cand_name
+        if cand_role:
+            parsed["designation"] = cand_role
+
+        # Total Experience Heuristic
+        exp_m1 = re.search(r'(\d+(?:\.\d+)?)\+?\s*(?:years|year|yrs|yr)(?:\s+of)?\s+(?:experience|exp|total experience|it experience)', text, re.I)
+        exp_m2 = re.search(r'(?:total\s+experience|overall\s+experience|work\s+experience|professional\s+experience|experience)[:\s]+(\d+(?:\.\d+)?)\+?\s*(?:years|year|yrs|yr)?', text, re.I)
+        if exp_m1:
             try:
-                parsed["total_experience_years"] = float(exp_m.group(1))
+                parsed["total_experience_years"] = float(exp_m1.group(1))
             except Exception:
                 pass
+        elif exp_m2:
+            try:
+                parsed["total_experience_years"] = float(exp_m2.group(1))
+            except Exception:
+                pass
+        else:
+            date_ranges = re.findall(r'\b(20\d{2})\b\s*(?:-|to|–)\s*(?:present|current|\b(20\d{2})\b)', text, re.I)
+            if date_ranges:
+                from datetime import datetime
+                curr_year = datetime.now().year
+                start_year = min(int(r[0]) for r in date_ranges)
+                calcd = round(float(curr_year - start_year), 1)
+                if 0.5 <= calcd <= 30.0:
+                    parsed["total_experience_years"] = calcd
+
+        # Location Heuristic
+        loc_m = re.search(r'(?:location|address|residence|city)[:\s]+([^\n\r\|•]+)', text, re.I)
+        if loc_m:
+            parsed["location"] = loc_m.group(1).strip()[:50]
+        else:
+            common_cities = ["hyderabad", "bengaluru", "bangalore", "pune", "chennai", "mumbai", "noida", "gurgaon", "gurugram", "delhi", "kolkata", "ahmedabad", "kochi", "coimbatore", "chandigarh", "jaipur"]
+            for city in common_cities:
+                if re.search(rf'\b{city}\b', text[:1500], re.I):
+                    city_m = re.search(rf'\b({city}[,\s]+[A-Za-z\s]+)', text[:1500], re.I)
+                    if city_m:
+                        parsed["location"] = city_m.group(1).strip()[:40]
+                    else:
+                        parsed["location"] = city.title()
+                    break
+
+        # Current Company Heuristic
+        comp_m = re.search(r'(?:current\s+company|current\s+employer|employer|company|organization)[:\s]+([A-Za-z0-9\s\.\,\&-]{2,40})(?=\n|\||•|,|\.|$)', text, re.I)
+        if comp_m and not any(w in comp_m.group(1).lower() for w in ["name", "na", "none", "profile", "summary"]):
+            parsed["current_company"] = comp_m.group(1).strip()
+        else:
+            comp_m2 = re.search(r'(?:working\s+(?:as|at)|employed\s+at|joined)\s+([A-Z][A-Za-z0-9\s\.\&-]{2,30})\b', text)
+            if comp_m2:
+                parsed["current_company"] = comp_m2.group(1).strip()
 
         # Technical skills heuristic scan across TECH_TAXONOMY
         heur_skills: List[str] = []
@@ -270,13 +355,14 @@ class SetupService:
                 deduped_heur.append(s)
         parsed["skills"] = deduped_heur
 
-        # Designation heuristic scan
-        for t in ["QA Automation Engineer", "Software Development Engineer in Test", "SDET", "Software Test Engineer", "Backend Developer", "Java Developer", "Frontend Developer", "Full Stack Developer", "Software Engineer", "DevOps Engineer"]:
-            if re.search(r'\b' + re.escape(t) + r'\b', normalized_text, re.IGNORECASE):
-                parsed["designation"] = t
-                break
+        # Designation fallback scan across roles
+        if not parsed.get("designation"):
+            for t in ["QA Automation Engineer", "Software Development Engineer in Test", "SDET", "Software Test Engineer", "Backend Developer", "Java Developer", "Frontend Developer", "Full Stack Developer", "Software Engineer", "DevOps Engineer"]:
+                if re.search(r'\b' + re.escape(t) + r'\b', normalized_text, re.IGNORECASE):
+                    parsed["designation"] = t
+                    break
 
-        # 2. Dynamic AI extraction with latest Gemini models (gemini-3.8-flash and gemini-3.7-flash with HIGH thinking)
+        # 2. Dynamic AI extraction with latest Gemini models
         llm = LLMService()
         if llm.can_use_llm():
             prompt = f"""You are an elite ATS technical resume parser. Extract ALL candidate details and EVERY single technical skill from this resume text:
@@ -297,13 +383,13 @@ Return ONLY a strictly valid JSON object with schema:
   "expected_ctc_inr": integer in INR or null if not explicitly mentioned,
   "notice_period_days": integer in calendar days (e.g. 30, 60, 90) or null if not mentioned,
   "skills": ["Extract EVERY SINGLE technical skill, programming language, framework, database, tool, cloud technology, library, or protocol mentioned in the resume. Do NOT omit or truncate any skills!"],
-  "suggested_target_roles": ["3 to 5 high-fit target job titles matching candidate's actual primary skills and designation (e.g. Backend Engineer, Full Stack Engineer, Java Developer)"],
+  "suggested_target_roles": ["3 to 5 high-fit target job titles matching candidate's actual primary skills and designation"],
   "highest_education": "Degree, major, and institution name"
 }}"""
             try:
+                raw_text = ""
                 if llm._is_gemini():
                     raw_text = llm.call_gemini_sync(prompt, json_output=True, temperature=0.1)
-                    llm_data = json.loads(raw_text)
                 else:
                     import httpx
                     res = httpx.post(
@@ -313,27 +399,31 @@ Return ONLY a strictly valid JSON object with schema:
                         timeout=20.0
                     )
                     if res.status_code == 200:
-                        llm_data = json.loads(res.json()["choices"][0]["message"]["content"])
-                    else:
-                        llm_data = {}
+                        raw_text = res.json()["choices"][0]["message"]["content"]
 
-                # Merge LLM data
-                if isinstance(llm_data, dict):
-                    llm_skills = llm_data.get("skills", [])
-                    if isinstance(llm_skills, list) and llm_skills:
-                        combined_skills = list(llm_skills) + deduped_heur
-                        merged_set = set()
-                        merged_list = []
-                        for s in combined_skills:
-                            s_str = str(s).strip()
-                            if s_str and s_str.lower() not in merged_set:
-                                merged_set.add(s_str.lower())
-                                merged_list.append(s_str)
-                        llm_data["skills"] = merged_list
+                if raw_text:
+                    clean_json = raw_text.strip()
+                    if clean_json.startswith("```"):
+                        clean_json = re.sub(r'^```(?:json)?\s*', '', clean_json)
+                        clean_json = re.sub(r'\s*```$', '', clean_json)
+                    llm_data = json.loads(clean_json)
 
-                    for k, v in llm_data.items():
-                        if v is not None and v != "":
-                            parsed[k] = v
+                    if isinstance(llm_data, dict):
+                        llm_skills = llm_data.get("skills", [])
+                        if isinstance(llm_skills, list) and llm_skills:
+                            combined_skills = list(llm_skills) + deduped_heur
+                            merged_set = set()
+                            merged_list = []
+                            for s in combined_skills:
+                                s_str = str(s).strip()
+                                if s_str and s_str.lower() not in merged_set:
+                                    merged_set.add(s_str.lower())
+                                    merged_list.append(s_str)
+                            llm_data["skills"] = merged_list
+
+                        for k, v in llm_data.items():
+                            if v is not None and v != "":
+                                parsed[k] = v
             except Exception as e:
                 logger.debug(f"LLM resume parsing skipped/fallback: {e}")
 
@@ -349,6 +439,8 @@ Return ONLY a strictly valid JSON object with schema:
             clean_p = re.sub(r'\D', '', str(parsed["phone"]))
             if clean_p.startswith('91') and len(clean_p) == 12:
                 clean_p = clean_p[2:]
+            elif clean_p.startswith('1') and len(clean_p) == 11:
+                clean_p = clean_p[1:]
             parsed["phone"] = clean_p
 
         return parsed
@@ -717,6 +809,38 @@ Return ONLY a strictly valid JSON object with schema:
             border_style="cyan"
         ))
 
+        # Optional: Sync fresh details from uploaded resume PDF
+        if RESUME_PATH.exists():
+            if Confirm.ask("Sync & pre-populate details from currently uploaded resume PDF?", default=False):
+                self.console.print("[dim]Re-extracting details from uploaded resume PDF...[/dim]")
+                parsed = self.parse_resume_to_dict(RESUME_PATH)
+                if parsed.get("full_name"):
+                    profile.personal.full_name = parsed["full_name"]
+                    profile.name = parsed["full_name"]
+                if parsed.get("email"):
+                    profile.personal.email = parsed["email"]
+                if parsed.get("phone"):
+                    profile.personal.phone = parsed["phone"]
+                if parsed.get("location"):
+                    profile.personal.location = parsed["location"]
+                if parsed.get("designation"):
+                    profile.professional.designation = parsed["designation"]
+                    profile.current_role = parsed["designation"]
+                if parsed.get("current_company"):
+                    profile.professional.current_company = parsed["current_company"]
+                if parsed.get("total_experience_years"):
+                    exp_val = float(parsed["total_experience_years"])
+                    profile.professional.total_experience_years = exp_val
+                    profile.experience_years = exp_val
+                if parsed.get("skills"):
+                    for s in parsed["skills"]:
+                        if s not in profile.skills:
+                            profile.skills.append(s)
+                if parsed.get("suggested_target_roles"):
+                    profile.preferred_roles = list(parsed["suggested_target_roles"])
+                    profile.target_roles = list(parsed["suggested_target_roles"])
+                self.console.print("[green][OK] Successfully refreshed details from resume! You can now verify or edit each field below:[/green]\n")
+
         # 1. Personal Information
         self.console.print("\n[bold yellow]1. Personal Information[/bold yellow]")
         name = Prompt.ask("Full Name", default=profile.personal.full_name or profile.name or "")
@@ -814,13 +938,22 @@ Return ONLY a strictly valid JSON object with schema:
         skills_raw = Prompt.ask("Skills (comma separated)", default=skills_default)
         profile.skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
 
+        # Ensure root attributes are in sync
+        profile.name = profile.personal.full_name
+        profile.current_role = profile.professional.designation
+        profile.experience_years = profile.professional.total_experience_years
+        profile.current_ctc_lpa = cur_lpa
+        profile.expected_ctc_lpa = exp_lpa
+        profile.notice_period_days = notice_days
+
         # Save to disk
         PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(PROFILE_PATH, "w", encoding="utf-8") as f:
             f.write(profile.model_dump_json(indent=2))
 
-        # Invalidate singleton cache
+        # Invalidate singleton cache and seed memory
         ProfileLoader.reset()
+        self.memory_service.seed_from_profile(profile)
 
         self.memory_service.add_conversation_note(
             f"User updated profile details for {name} ({designation}): Target Roles: {', '.join(profile.preferred_roles)}; "
@@ -887,11 +1020,45 @@ Return ONLY a strictly valid JSON object with schema:
                 preferred_locations=[parsed.get("location")] if parsed.get("location") else ["Remote", "Hybrid"]
             )
 
-        # If name is still empty, prompt user
-        if not profile.personal.full_name:
-            cand_name = Prompt.ask("Full Name", default=parsed.get("full_name") or "")
-            profile.personal.full_name = cand_name
-            profile.name = cand_name
+        # Apply newly extracted values as defaults into profile
+        if parsed.get("full_name"):
+            profile.personal.full_name = parsed["full_name"]
+            profile.name = parsed["full_name"]
+        if parsed.get("email"):
+            profile.personal.email = parsed["email"]
+        if parsed.get("phone"):
+            profile.personal.phone = parsed["phone"]
+        if parsed.get("location"):
+            profile.personal.location = parsed["location"]
+            if parsed["location"] not in profile.preferred_locations:
+                profile.preferred_locations.insert(0, parsed["location"])
+        if parsed.get("designation"):
+            profile.professional.designation = parsed["designation"]
+            profile.current_role = parsed["designation"]
+        if parsed.get("current_company"):
+            profile.professional.current_company = parsed["current_company"]
+        if parsed.get("total_experience_years"):
+            exp_num = float(parsed["total_experience_years"])
+            profile.professional.total_experience_years = exp_num
+            profile.experience_years = exp_num
+
+        # Prompt user to confirm or edit details
+        self.console.print("\n[bold yellow]Please review and confirm details extracted from new resume:[/bold yellow]")
+        profile.personal.full_name = Prompt.ask("Full Name", default=profile.personal.full_name or profile.name or "")
+        profile.name = profile.personal.full_name
+        profile.personal.email = Prompt.ask("Email Address", default=profile.personal.email or "")
+        profile.personal.phone = Prompt.ask("Mobile Phone (10 digits)", default=profile.personal.phone or "")
+        profile.personal.location = Prompt.ask("Location (City, State, Country)", default=profile.personal.location or "")
+
+        profile.professional.designation = Prompt.ask("Current Designation / Role", default=profile.professional.designation or profile.current_role or "")
+        profile.current_role = profile.professional.designation
+        profile.professional.current_company = Prompt.ask("Current Employer", default=profile.professional.current_company or "")
+        try:
+            exp_input = float(Prompt.ask("Total Experience in Years", default=str(profile.professional.total_experience_years or profile.experience_years or 1.0)))
+            profile.professional.total_experience_years = exp_input
+            profile.experience_years = exp_input
+        except Exception:
+            pass
 
         # Prompt user to confirm / edit skills
         self.console.print("\n[bold yellow]Confirm or update skills for resume:[/bold yellow]")
@@ -911,20 +1078,18 @@ Return ONLY a strictly valid JSON object with schema:
             synth = synthesize_target_roles(profile.professional.designation, profile.skills)
             roles_raw = Prompt.ask("Target job roles (comma separated)", default=", ".join(synth))
             profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
-
-        if parsed.get("designation"):
-            profile.professional.designation = parsed["designation"]
-        if parsed.get("total_experience_years"):
-            profile.professional.total_experience_years = float(parsed["total_experience_years"])
+        profile.target_roles = list(profile.preferred_roles)
 
         PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(PROFILE_PATH, "w", encoding="utf-8") as f:
             f.write(profile.model_dump_json(indent=2))
 
-        # Invalidate singleton cache
+        # Invalidate singleton cache and update memory
         ProfileLoader.reset()
+        self.memory_service.seed_from_profile(profile)
+        self.memory_service.set_preference("total_experience_years", profile.professional.total_experience_years)
 
-        self.console.print(f"[green][OK] Profile updated with {len(profile.skills)} verified skills![/green]")
+        self.console.print(f"[green][OK] Candidate profile and {len(profile.skills)} technical skills updated successfully![/green]")
 
         self.memory_service.add_conversation_note(f"User updated resume file from {new_resume_path.name}.")
 

@@ -49,39 +49,38 @@ class CandidateProfile(BaseModel):
     @classmethod
     def sync_fields(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            name = data.get("name") or (data.get("personal", {}).get("full_name") if isinstance(data.get("personal"), dict) else None)
-            current_role = data.get("current_role") or (data.get("professional", {}).get("designation") if isinstance(data.get("professional"), dict) else None)
+            personal_dict = data.get("personal", {}) if isinstance(data.get("personal"), dict) else {}
+            prof_dict = data.get("professional", {}) if isinstance(data.get("professional"), dict) else {}
+
+            name = personal_dict.get("full_name") or data.get("name")
+            current_role = prof_dict.get("designation") or data.get("current_role")
             
-            exp = data.get("experience_years")
-            if exp is None and isinstance(data.get("professional"), dict):
-                exp = data.get("professional", {}).get("total_experience_years")
+            exp = prof_dict.get("total_experience_years")
+            if exp is None:
+                exp = data.get("experience_years")
             
-            c_lpa = data.get("current_ctc_lpa")
-            if c_lpa is None and isinstance(data.get("professional"), dict):
-                c_lpa = data.get("professional", {}).get("current_lpa")
+            c_lpa = prof_dict.get("current_lpa")
+            if c_lpa is None:
+                c_lpa = data.get("current_ctc_lpa")
                 
-            e_lpa = data.get("expected_ctc_lpa")
-            if e_lpa is None and isinstance(data.get("professional"), dict):
-                e_lpa = data.get("professional", {}).get("expected_lpa")
+            e_lpa = prof_dict.get("expected_lpa")
+            if e_lpa is None:
+                e_lpa = data.get("expected_ctc_lpa")
                 
-            np_days = data.get("notice_period_days")
-            if np_days is None and isinstance(data.get("professional"), dict):
-                np_days = data.get("professional", {}).get("notice_period_days")
+            np_days = prof_dict.get("notice_period_days")
+            if np_days is None:
+                np_days = data.get("notice_period_days")
 
             roles = data.get("target_roles") or data.get("preferred_roles") or []
 
             # Populate personal dictionary
-            personal_dict = data.get("personal", {}) if isinstance(data.get("personal"), dict) else {}
             if name:
-                personal_dict["full_name"] = name
+                personal_dict["full_name"] = str(name).strip()
             data["personal"] = personal_dict
 
             # Populate professional dictionary
-            prof_dict = data.get("professional", {}) if isinstance(data.get("professional"), dict) else {}
-            if prof_dict.get("designation"):
-                current_role = prof_dict["designation"]
-            elif current_role:
-                prof_dict["designation"] = current_role
+            if current_role:
+                prof_dict["designation"] = str(current_role).strip()
             if exp is not None:
                 prof_dict["total_experience_years"] = float(exp)
             if c_lpa is not None:
@@ -92,24 +91,23 @@ class CandidateProfile(BaseModel):
                 prof_dict["notice_period_days"] = int(np_days)
             data["professional"] = prof_dict
 
-            # Populate root fields
-            if not data.get("name") and name:
-                data["name"] = name
-            if not data.get("current_role") and current_role:
-                data["current_role"] = current_role
-            if data.get("experience_years") is None and exp is not None:
+            # Populate root fields to keep in exact sync
+            if name:
+                data["name"] = str(name).strip()
+            if current_role:
+                data["current_role"] = str(current_role).strip()
+            if exp is not None:
                 data["experience_years"] = float(exp)
-            if data.get("current_ctc_lpa") is None and c_lpa is not None:
+            if c_lpa is not None:
                 data["current_ctc_lpa"] = float(c_lpa)
-            if data.get("expected_ctc_lpa") is None and e_lpa is not None:
+            if e_lpa is not None:
                 data["expected_ctc_lpa"] = float(e_lpa)
-            if data.get("notice_period_days") is None and np_days is not None:
+            if np_days is not None:
                 data["notice_period_days"] = int(np_days)
 
             # Align role lists
-            if not data.get("target_roles") and roles:
+            if roles:
                 data["target_roles"] = roles
-            if not data.get("preferred_roles") and roles:
                 data["preferred_roles"] = roles
 
         return data

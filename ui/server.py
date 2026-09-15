@@ -377,6 +377,43 @@ async def upload_resume(file: UploadFile = File(...)):
         resume_service = ResumeService()
         meta = resume_service.save_resume_bytes(content, original_filename=file.filename)
 
+        # Parse newly uploaded resume to sync candidate profile details
+        try:
+            from services.setup_service import SetupService
+            setup_svc = SetupService()
+            parsed = setup_svc.parse_resume_to_dict(Path(settings.RESUME_PATH))
+            prof_path = Path(settings.PROFILE_PATH)
+            if prof_path.exists():
+                with open(prof_path, "r", encoding="utf-8-sig") as f:
+                    p_data = json.load(f)
+                cand_profile = CandidateProfile(**p_data)
+                if parsed.get("full_name"):
+                    cand_profile.personal.full_name = parsed["full_name"]
+                    cand_profile.name = parsed["full_name"]
+                if parsed.get("email"):
+                    cand_profile.personal.email = parsed["email"]
+                if parsed.get("phone"):
+                    cand_profile.personal.phone = parsed["phone"]
+                if parsed.get("location"):
+                    cand_profile.personal.location = parsed["location"]
+                if parsed.get("designation"):
+                    cand_profile.professional.designation = parsed["designation"]
+                    cand_profile.current_role = parsed["designation"]
+                if parsed.get("current_company"):
+                    cand_profile.professional.current_company = parsed["current_company"]
+                if parsed.get("total_experience_years"):
+                    cand_profile.professional.total_experience_years = float(parsed["total_experience_years"])
+                    cand_profile.experience_years = float(parsed["total_experience_years"])
+                if parsed.get("skills"):
+                    for s in parsed["skills"]:
+                        if s not in cand_profile.skills:
+                            cand_profile.skills.append(s)
+                with open(prof_path, "w", encoding="utf-8") as f:
+                    f.write(cand_profile.model_dump_json(indent=2))
+                ProfileLoader.reset()
+        except Exception as err:
+            logger.warning(f"Could not auto-sync profile from uploaded resume: {err}")
+
         # Reload profile and update memory
         loader = ProfileLoader.get_instance()
         profile = loader.profile
