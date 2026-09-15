@@ -172,3 +172,28 @@ def test_apply_profile_updates(tmp_path, monkeypatch):
     assert updated["professional"]["notice_period_days"] == 30
     assert "Playwright" in updated["skills"]
     assert "Python" in updated["skills"]
+
+@pytest.mark.asyncio
+async def test_execute_search_and_apply_does_not_raise_name_error(tmp_path, monkeypatch):
+    import rich.prompt
+    from unittest.mock import AsyncMock
+
+    test_profile_file = tmp_path / "candidate_profile.json"
+    test_profile = {
+        "name": "Satya",
+        "personal": {"full_name": "Satya", "email": "satya@example.com"},
+        "professional": {"designation": "Software Engineer", "total_experience_years": 4.0},
+        "skills": ["Java", "Spring"],
+        "preferred_roles": ["Software Engineer"],
+        "preferred_locations": ["Hyderabad"]
+    }
+    test_profile_file.write_text(json.dumps(test_profile), encoding="utf-8")
+
+    import services.chat_agent as ca_mod
+    monkeypatch.setattr(ca_mod, "PROFILE_PATH", test_profile_file)
+    monkeypatch.setattr(rich.prompt.Prompt, "ask", lambda *args, **kwargs: "2")
+    monkeypatch.setattr(rich.prompt.Confirm, "ask", lambda *args, **kwargs: False)
+
+    agent = ChatAgent()
+    # Should complete confirmation table display without NameError on target_dry_run
+    await agent.execute_search_and_apply({"keyword": "Fullstack", "platform": "linkedin"})

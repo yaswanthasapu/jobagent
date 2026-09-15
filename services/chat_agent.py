@@ -542,6 +542,7 @@ class ChatAgent:
         target_date_filter = search_params.get("date_posted") or prefs.get("default_date_filter", "24h")
         target_remote = bool(search_params.get("remote_only", False))
         target_max_jobs = int(search_params.get("max_jobs") or 5)
+        target_dry_run = bool(search_params.get("dry_run", False))
         # Prompt user explicitly for Auto-Apply vs Manual Approval
         self.console.print("\n[bold cyan]Application Submission Mode:[/bold cyan]")
         self.console.print("  [bold green][1][/bold green] ⚡ [bold white]Auto-Apply[/bold white] (Automatically submit applications without pausing)")
