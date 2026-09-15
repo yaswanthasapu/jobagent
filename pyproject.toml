@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobagent"
-version = "1.0.25"
+version = "1.0.26"
 description = "Autonomous Multi-Platform AI Job Application Agent for LinkedIn and Naukri"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-    { name = "Yaswanth Asapu", email = "yaswanth901@gmail.com" }
+    { name = "JobAgent Maintainers" }
 ]
 keywords = [
     "job-application",

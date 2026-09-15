@@ -729,10 +729,10 @@ Answer:"""
 
         # 3. Notice period
         if "notice period" in q or "how soon can you join" in q:
-            days = candidate_context.get("notice_period_days", 60)
+            days = candidate_context.get("notice_period_days", 30)
             if options:
                 for idx, opt in enumerate(options_lower):
-                    if str(days) in opt or "60" in opt or "2 months" in opt:
+                    if str(days) in opt:
                         return options[idx]
                     if "immediate" in opt and days <= 15:
                         return options[idx]
@@ -743,9 +743,9 @@ Answer:"""
 
         # 4. Current / Expected CTC
         if any(w in q for w in ["current ctc", "current salary", "current compensation", "current annual compensation", "current lpa"]):
-            cur_lpa = float(candidate_context.get("current_lpa", 8.9))
+            cur_lpa = float(candidate_context.get("current_lpa", 0.0) or 0.0)
             if "month" in q:
-                return str(int((cur_lpa * 100000) / 12))
+                return str(int((cur_lpa * 100000) / 12)) if cur_lpa > 0 else "0"
             is_lpa = any(w in q for w in ["lakh", "lakhs", "lpa", "lac"]) and not any(w in q for w in ["in inr", "inr", "larger than 100", "200000"])
             if is_lpa:
                 return str(int(cur_lpa)) if cur_lpa.is_integer() else str(cur_lpa)
@@ -754,9 +754,9 @@ Answer:"""
             return str(int(cur_lpa * 100000))
 
         if any(w in q for w in ["expected ctc", "expected salary", "expected compensation", "expected annual compensation", "salary expectation", "expected lpa"]):
-            exp_lpa = float(candidate_context.get("expected_lpa", 15.0))
+            exp_lpa = float(candidate_context.get("expected_lpa", 0.0) or 0.0)
             if "month" in q:
-                return str(int((exp_lpa * 100000) / 12))
+                return str(int((exp_lpa * 100000) / 12)) if exp_lpa > 0 else "0"
             is_lpa = any(w in q for w in ["lakh", "lakhs", "lpa", "lac"]) and not any(w in q for w in ["in inr", "inr", "larger than 100", "350000"])
             if is_lpa:
                 return str(int(exp_lpa)) if exp_lpa.is_integer() else str(exp_lpa)

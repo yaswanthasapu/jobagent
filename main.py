@@ -42,12 +42,43 @@ async def interactive_menu(console: Console, setup_service: SetupService, memory
         border_style="cyan"
     ))
 
-    # 1. First-time setup check (just like 'claude' CLI on first run)
-    if not setup_service.is_setup_complete():
-        console.print("\n[bold yellow]Welcome! Initial setup required on first run.[/bold yellow]")
-        console.print("[dim]We will configure your API key, resume, CTC, and target roles once.[/dim]")
-        console.print("[dim]The agent will remember everything across all future sessions.[/dim]\n")
-        await setup_service.run_setup_wizard()
+    # 1. First-time setup check - require profile configuration before opening main menu
+    while not setup_service.has_configured_profile():
+        console.print(Panel.fit(
+            "[bold cyan]=====================================================[/bold cyan]\n"
+            "[bold white]           AI JOB APPLICATION AGENT                  [/bold white]\n"
+            "[dim]  Autonomous Multi-Platform Applications: LinkedIn & Naukri [/dim]\n"
+            "[bold cyan]=====================================================[/bold cyan]",
+            border_style="cyan"
+        ))
+        console.print("\n[bold yellow]Welcome to JobAgent 👋[/bold yellow]")
+        console.print("[white]Your candidate profile hasn't been configured yet.[/white]")
+        console.print("[dim]Let's set up your candidate profile before we begin.[/dim]\n")
+        console.print("  [bold yellow][1][/bold yellow] 🛠️  [bold white]Create Profile / Run Setup Wizard[/bold white] (Step-by-step interactive setup)")
+        console.print("  [bold green][2][/bold green] 📄 [bold white]Import Resume[/bold white] (Auto-extract all candidate details from PDF)")
+        console.print("  [bold cyan][3][/bold cyan] 🔑 [bold white]Sign In / Connect Job Platforms[/bold white] (Save LinkedIn & Naukri login)")
+        console.print("  [bold red][0][/bold red] 🚪 [bold white]Exit[/bold white]")
+
+        init_choice = Prompt.ask("\n[bold cyan]Select an option[/bold cyan]", choices=["1", "2", "3", "0"], default="1")
+        if init_choice == "1":
+            await setup_service.run_setup_wizard()
+        elif init_choice == "2":
+            resume_path_str = Prompt.ask("[bold green]Enter path to your Resume PDF (or press Enter to cancel)[/bold green]", default="")
+            clean_str = resume_path_str.strip().strip('"').strip("'")
+            if clean_str:
+                new_path = Path(clean_str)
+                if not new_path.exists() or not new_path.is_file():
+                    console.print(f"[bold red]Error: Resume file '{clean_str}' not found or is not a valid file.[/bold red]")
+                else:
+                    await setup_service.update_resume(new_path)
+        elif init_choice == "3":
+            from apply_jobs import interactive_platform_signin
+            plat_choice = Prompt.ask("Select platform to sign into", choices=["all", "linkedin", "naukri"], default="all")
+            await interactive_platform_signin(console=console, platform=plat_choice)
+            Prompt.ask("\n[dim]Press Enter to return to setup menu[/dim]")
+        elif init_choice == "0":
+            console.print("\n[bold yellow]Setup exited. Run 'jobagent' anytime to configure your profile.[/bold yellow]\n")
+            return
 
     # 2. Main interactive menu loop
     while True:

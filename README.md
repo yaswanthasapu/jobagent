@@ -168,4 +168,4 @@ An API key is **optional**. If you supply `GEMINI_API_KEY` or `OPENAI_API_KEY`, 
 ---
 
 ## 📄 License
-MIT License. Created & maintained by [Yaswanth Asapu](mailto:yaswanth901@gmail.com).
+MIT License. Created & maintained by the JobAgent Community.

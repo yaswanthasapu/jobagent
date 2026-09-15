@@ -114,23 +114,28 @@ class SetupService:
         self.console = console or Console()
         self.memory_service = MemoryService()
 
-    def is_setup_complete(self, runtime_api_key: Optional[str] = None, allow_offline: bool = False) -> bool:
-        """Checks if the user has already configured their API key, resume, and profile."""
-        has_profile = PROFILE_PATH.exists()
+    def has_configured_profile(self) -> bool:
+        """Checks if the user has an existing, non-empty candidate profile configured on this machine."""
+        if not PROFILE_PATH.exists():
+            return False
+        try:
+            with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+                name = data.get("name") or (data.get("personal", {}).get("full_name") if isinstance(data.get("personal"), dict) else "")
+                skills = data.get("skills", [])
+                if not name or not str(name).strip() or not skills:
+                    return False
+                if str(name).strip().lower() in ["", "candidate", "your name", "software professional"]:
+                    return False
+                return True
+        except Exception:
+            return False
+
+    def is_setup_complete(self, runtime_api_key: Optional[str] = None, allow_offline: bool = True) -> bool:
+        """Checks if the user has already configured their profile, resume, and optional API key."""
+        has_profile = self.has_configured_profile()
         has_resume = RESUME_PATH.exists()
         has_api_key = bool(runtime_api_key or settings.GEMINI_API_KEY or settings.OPENAI_API_KEY or self._get_env_key("GEMINI_API_KEY") or self._get_env_key("OPENAI_API_KEY"))
-
-        if has_profile:
-            try:
-                with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
-                    data = json.load(f)
-                    name = data.get("name") or (data.get("personal", {}).get("full_name") if isinstance(data.get("personal"), dict) else "")
-                    skills = data.get("skills", [])
-                    # Profile is only considered complete if candidate name and skills are actually populated
-                    if not name or not str(name).strip() or not skills:
-                        has_profile = False
-            except Exception:
-                has_profile = False
 
         if allow_offline:
             return has_profile and has_resume
@@ -525,7 +530,7 @@ Return ONLY a strictly valid JSON object with schema:
 
         # Target Platforms & Locations
         self.console.print("\n[bold yellow]6. Target Platforms & Preferred Locations[/bold yellow]")
-        def_loc = ", ".join(existing_profile.preferred_locations) if existing_profile and existing_profile.preferred_locations else "Hyderabad, Remote"
+        def_loc = ", ".join(existing_profile.preferred_locations) if (existing_profile and existing_profile.preferred_locations) else (parsed.get("location") or "Remote, Hybrid")
         loc_raw = Prompt.ask("Preferred Job Locations (comma separated)", default=def_loc)
         preferred_locations = [l.strip() for l in loc_raw.split(",") if l.strip()]
 
@@ -651,31 +656,42 @@ Return ONLY a strictly valid JSON object with schema:
     def display_status(self, profile: Optional[CandidateProfile] = None) -> None:
         """Display rich formatted status dashboard of profile, memory, and settings."""
         if not profile:
-            if not PROFILE_PATH.exists():
-                self.console.print("[yellow]No profile configured yet. Run 'python setup.py' to get started.[/yellow]")
+            if not self.has_configured_profile():
+                self.console.print("[yellow]No candidate profile configured yet. Run 'jobagent' or 'jobagent --setup' to get started.[/yellow]")
                 return
             with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
                 profile = CandidateProfile(**json.load(f))
 
         prefs = self.memory_service.get_all_preferences()
         api_key = settings.GEMINI_API_KEY or settings.OPENAI_API_KEY or self._get_env_key("GEMINI_API_KEY") or self._get_env_key("OPENAI_API_KEY")
-        key_status = "[bold green]Configured[/bold green]" if api_key else "[bold red]Missing[/bold red]"
+        key_status = "[bold green]Configured[/bold green]" if api_key else "[bold yellow]Not set (Offline NLP active)[/bold yellow]"
 
         table = Table(title="[bold cyan]Agent Status & Candidate Profile[/bold cyan]")
         table.add_column("Property", style="bold white")
         table.add_column("Configured Value", style="cyan")
 
-        table.add_row("Candidate Name", profile.personal.full_name)
-        table.add_row("Contact Phone", profile.personal.phone)
-        table.add_row("Email", profile.personal.email)
-        table.add_row("Location", profile.personal.location)
-        table.add_row("Current Title", profile.professional.designation)
-        table.add_row("Current Company", profile.professional.current_company)
-        table.add_row("Total Experience", f"{profile.professional.total_experience_years} Years")
-        table.add_row("Current CTC", f"INR {prefs.get('current_ctc_inr', int(profile.professional.current_lpa * 100000)):,} ({profile.professional.current_lpa} LPA)")
-        table.add_row("Expected CTC", f"INR {prefs.get('expected_ctc_inr', int(profile.professional.expected_lpa * 100000)):,} ({profile.professional.expected_lpa} LPA)")
-        table.add_row("Notice Period", f"{profile.professional.notice_period_days} Days (~{round(profile.professional.notice_period_days / 7)} Weeks)")
-        table.add_row("Target Roles", ", ".join(profile.preferred_roles))
+        table.add_row("Candidate Name", profile.personal.full_name or profile.name or "Not configured")
+        table.add_row("Contact Phone", profile.personal.phone or "Not configured")
+        table.add_row("Email", profile.personal.email or "Not configured")
+        table.add_row("Location", profile.personal.location or "Not configured")
+        table.add_row("Current Title", profile.professional.designation or profile.current_role or "Not configured")
+        table.add_row("Current Company", profile.professional.current_company or "Not configured")
+        table.add_row("Total Experience", f"{profile.professional.total_experience_years} Years" if profile.professional.total_experience_years else "Not configured")
+
+        cur_lpa = profile.professional.current_lpa or profile.current_ctc_lpa or 0.0
+        exp_lpa = profile.professional.expected_lpa or profile.expected_ctc_lpa or 0.0
+        cur_ctc_inr = prefs.get('current_ctc_inr') or (int(cur_lpa * 100000) if cur_lpa > 0 else None)
+        exp_ctc_inr = prefs.get('expected_ctc_inr') or (int(exp_lpa * 100000) if exp_lpa > 0 else None)
+
+        cur_disp = f"INR {cur_ctc_inr:,} ({cur_lpa} LPA)" if cur_ctc_inr else ("Not specified" if cur_lpa == 0 else f"{cur_lpa} LPA")
+        exp_disp = f"INR {exp_ctc_inr:,} ({exp_lpa} LPA)" if exp_ctc_inr else ("Not specified" if exp_lpa == 0 else f"{exp_lpa} LPA")
+        notice_val = profile.professional.notice_period_days or profile.notice_period_days
+        notice_disp = f"{notice_val} Days (~{round(notice_val / 7)} Weeks)" if notice_val else "Not specified"
+
+        table.add_row("Current CTC", cur_disp)
+        table.add_row("Expected CTC", exp_disp)
+        table.add_row("Notice Period", notice_disp)
+        table.add_row("Target Roles", ", ".join(profile.preferred_roles) if profile.preferred_roles else "Not configured")
         table.add_row("Target Platforms", ", ".join(prefs.get("preferred_platforms", ["linkedin", "naukri"])))
         table.add_row("Default Date Filter", prefs.get("default_date_filter", "24h (Latest)"))
         table.add_row("AI API Key", key_status)
@@ -852,40 +868,63 @@ Return ONLY a strictly valid JSON object with schema:
         if PROFILE_PATH.exists():
             with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
                 profile = CandidateProfile(**json.load(f))
-
-            # Prompt user to confirm / edit skills
-            self.console.print("\n[bold yellow]Confirm or update skills for new resume:[/bold yellow]")
-            combined_skills = list(profile.skills)
-            for s in extracted_skills:
-                if s not in combined_skills:
-                    combined_skills.append(s)
-            
-            skills_raw = Prompt.ask("Technical skills (comma separated)", default=", ".join(combined_skills))
-            profile.skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
-
-            # Prompt user to confirm / edit target roles
-            if suggested_roles:
-                roles_raw = Prompt.ask("Target job roles (comma separated)", default=", ".join(suggested_roles))
-                profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
-            else:
-                synth = synthesize_target_roles(profile.professional.designation, profile.skills)
-                roles_raw = Prompt.ask("Target job roles (comma separated)", default=", ".join(synth))
-                profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
-
-            if parsed.get("designation"):
-                profile.professional.designation = parsed["designation"]
-            if parsed.get("total_experience_years"):
-                profile.professional.total_experience_years = float(parsed["total_experience_years"])
-
-            with open(PROFILE_PATH, "w", encoding="utf-8") as f:
-                f.write(profile.model_dump_json(indent=2))
-
-            # Invalidate singleton cache
-            ProfileLoader.reset()
-
-            self.console.print(f"[green][OK] Profile updated with {len(profile.skills)} verified skills![/green]")
         else:
-            profile = None
+            profile = CandidateProfile(
+                personal=PersonalInfo(
+                    full_name=parsed.get("full_name") or "",
+                    email=parsed.get("email") or "",
+                    phone=parsed.get("phone") or "",
+                    location=parsed.get("location") or ""
+                ),
+                professional=ProfessionalInfo(
+                    designation=parsed.get("designation") or "",
+                    total_experience_years=float(parsed.get("total_experience_years", 1.0)),
+                    current_company=parsed.get("current_company") or "",
+                    notice_period_days=30
+                ),
+                skills=extracted_skills,
+                preferred_roles=suggested_roles or synthesize_target_roles(parsed.get("designation", ""), extracted_skills),
+                preferred_locations=[parsed.get("location")] if parsed.get("location") else ["Remote", "Hybrid"]
+            )
+
+        # If name is still empty, prompt user
+        if not profile.personal.full_name:
+            cand_name = Prompt.ask("Full Name", default=parsed.get("full_name") or "")
+            profile.personal.full_name = cand_name
+            profile.name = cand_name
+
+        # Prompt user to confirm / edit skills
+        self.console.print("\n[bold yellow]Confirm or update skills for resume:[/bold yellow]")
+        combined_skills = list(profile.skills)
+        for s in extracted_skills:
+            if s not in combined_skills:
+                combined_skills.append(s)
+
+        skills_raw = Prompt.ask("Technical skills (comma separated)", default=", ".join(combined_skills))
+        profile.skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
+
+        # Prompt user to confirm / edit target roles
+        if suggested_roles:
+            roles_raw = Prompt.ask("Target job roles (comma separated)", default=", ".join(suggested_roles))
+            profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
+        else:
+            synth = synthesize_target_roles(profile.professional.designation, profile.skills)
+            roles_raw = Prompt.ask("Target job roles (comma separated)", default=", ".join(synth))
+            profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
+
+        if parsed.get("designation"):
+            profile.professional.designation = parsed["designation"]
+        if parsed.get("total_experience_years"):
+            profile.professional.total_experience_years = float(parsed["total_experience_years"])
+
+        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+            f.write(profile.model_dump_json(indent=2))
+
+        # Invalidate singleton cache
+        ProfileLoader.reset()
+
+        self.console.print(f"[green][OK] Profile updated with {len(profile.skills)} verified skills![/green]")
 
         self.memory_service.add_conversation_note(f"User updated resume file from {new_resume_path.name}.")
 

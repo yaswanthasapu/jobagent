@@ -472,11 +472,11 @@ class JobEvaluator:
         review_triggers: List[str] = []
         hard_skip: Optional[str] = None
 
-        candidate_locations = [loc.lower() for loc in getattr(profile, "preferred_locations", []) or ["hyderabad", "bangalore", "pune", "chennai", "remote"]]
-        candidate_modes = [mode.lower() for mode in getattr(profile, "preferred_work_modes", []) or ["on-site", "hybrid", "remote"]]
-        candidate_notice = getattr(profile, "notice_period_days", 60) # 60
-        current_ctc = getattr(profile, "current_ctc_lpa", 8.9) # 8.9
-        expected_ctc = getattr(profile, "expected_ctc_lpa", 12.0) # 12.0
+        candidate_locations = [loc.lower() for loc in getattr(profile, "preferred_locations", []) or []]
+        candidate_modes = [mode.lower() for mode in getattr(profile, "preferred_work_modes", []) or ["remote", "hybrid", "on-site"]]
+        candidate_notice = getattr(profile, "notice_period_days", 30) or 30
+        current_ctc = getattr(profile, "current_ctc_lpa", 0.0) or 0.0
+        expected_ctc = getattr(profile, "expected_ctc_lpa", 0.0) or 0.0
 
         combined_text = f"{job.location} {job.title} {job.description_text}".lower()
 

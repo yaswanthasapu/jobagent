@@ -118,12 +118,22 @@ class MemoryService:
         """
         notes = self.get_conversation_notes()
         prefs = self.get_all_preferences()
-        return (
-            "User Preferences & Historical Chat Memory:\n"
-            f"- Preferred CTC: Current INR {prefs.get('current_ctc_inr', 890000):,} | Expected INR {prefs.get('expected_ctc_inr', 1200000):,}\n"
-            f"- Notice Period: {prefs.get('notice_period_days', 60)} days\n"
-            f"- Past Conversation Rules:\n  * " + "\n  * ".join(notes[-5:])
-        )
+        ctc_parts = []
+        if prefs.get("current_ctc_inr"):
+            ctc_parts.append(f"Current INR {prefs['current_ctc_inr']:,}")
+        if prefs.get("expected_ctc_inr"):
+            ctc_parts.append(f"Expected INR {prefs['expected_ctc_inr']:,}")
+        ctc_str = " | ".join(ctc_parts) if ctc_parts else "Not specified"
+        notice_str = f"{prefs['notice_period_days']} days" if prefs.get("notice_period_days") else "Not specified"
+
+        lines = [
+            "User Preferences & Historical Chat Memory:",
+            f"- Preferred CTC: {ctc_str}",
+            f"- Notice Period: {notice_str}"
+        ]
+        if notes:
+            lines.append("- Past Conversation Rules:\n  * " + "\n  * ".join(notes[-5:]))
+        return "\n".join(lines)
 
     def _normalize_key(self, key: str) -> str:
         """Normalizes a form question label for matching across variations."""

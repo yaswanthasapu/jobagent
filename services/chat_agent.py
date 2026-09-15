@@ -304,7 +304,7 @@ class ChatAgent:
                 updates_detected = True
 
         # CTC extraction
-        # Handles terminal output pastes like "Current CTC in INR (e.g. 890000) (890000): 576000"
+        # Handles terminal output pastes like "Current CTC in INR (e.g. 600000) (600000): 576000"
         # as well as natural chat like "current ctc is 5.76 LPA" or "current ctc 576000"
         cur_ctc_match = re.search(r'(?:current\s*ctc|current\s*salary|current\s*lpa)[^:\n]*:\s*(\d[\d,]*(?:\.\d+)?)', msg_lower)
         if not cur_ctc_match:
