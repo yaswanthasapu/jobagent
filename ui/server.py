@@ -30,7 +30,7 @@ STATIC_DIR = BASE_DIR / "static"
 app = FastAPI(
     title="JobAgent Control Center",
     description="Professional Web Dashboard & Real-Time Monitoring for JobAgent",
-    version="1.0.25"
+    version="1.0.27"
 )
 
 # Mount static files

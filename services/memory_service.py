@@ -19,14 +19,14 @@ DEFAULT_MEMORY: Dict[str, Any] = {
         "preferred_platforms": ["linkedin", "naukri"],
         "default_date_filter": "24h",
         "default_sort_by": "date",
-        "preferred_locations": ["Hyderabad", "Remote"],
+        "preferred_locations": ["Remote"],
         "auto_approve_applications": False,
         "easy_apply_only": True
     },
     "conversation_notes": [
-        "Rule: For profile, testing, tools, or experience questions ending in Yes/No, automatically select Yes.",
-        "Rule: Use candidate's existing LinkedIn uploaded resume directly without re-uploading every time.",
-        "Rule: Phone input should only contain the clean 10-digit number (without +91 country code prefix)."
+        "Rule: For profile, testing, tools, or experience questions ending in Yes/No, automatically select Yes if candidate possesses skill.",
+        "Rule: Use candidate's existing platform uploaded resume directly without re-uploading every time.",
+        "Rule: Phone input should only contain the clean 10-digit number (without country code prefix)."
     ],
     "learned_form_rules": {
         "ctc_inr_format": "raw_integer",
@@ -289,18 +289,22 @@ class MemoryService:
         return dict(self._memory.get("saved_form_answers", {}))
 
     def seed_from_profile(self, profile: Any) -> None:
-        """Seeds memory with candidate profile data so the agent never starts freshly with empty."""
+        """Seeds memory with candidate profile data so the agent dynamically adapts to any candidate."""
         if not profile:
             return
         try:
-            total_exp = str(int(round(profile.professional.total_experience_years))) if profile.professional.total_experience_years >= 1 else str(profile.professional.total_experience_years)
-            cur_lpa = str(int(profile.professional.current_lpa)) if profile.professional.current_lpa.is_integer() else str(profile.professional.current_lpa)
-            exp_lpa = str(int(profile.professional.expected_lpa)) if profile.professional.expected_lpa.is_integer() else str(profile.professional.expected_lpa)
-            cur_inr = str(int(profile.professional.current_lpa * 100000))
-            exp_inr = str(int(profile.professional.expected_lpa * 100000))
+            exp_raw = profile.professional.total_experience_years if profile.professional.total_experience_years is not None else 0.0
+            total_exp = str(int(round(exp_raw))) if exp_raw >= 1 else str(exp_raw)
+            c_lpa = profile.professional.current_lpa or 0.0
+            e_lpa = profile.professional.expected_lpa or 0.0
+            cur_lpa = str(int(c_lpa)) if isinstance(c_lpa, float) and c_lpa.is_integer() else str(c_lpa)
+            exp_lpa = str(int(e_lpa)) if isinstance(e_lpa, float) and e_lpa.is_integer() else str(e_lpa)
+            cur_inr = str(int(c_lpa * 100000))
+            exp_inr = str(int(e_lpa * 100000))
 
-            gender = getattr(profile.personal, "gender", "Male") or "Male"
-            race_eth = getattr(profile.personal, "race_ethnicity", "Asian") or "Asian"
+            gender = getattr(profile.personal, "gender", None) or "Male"
+            race_eth = getattr(profile.personal, "race_ethnicity", None) or "Asian"
+            notice_days = profile.professional.notice_period_days if profile.professional.notice_period_days is not None else 30
 
             initial_mappings = [
                 ("total it experience", total_exp, "number"),
@@ -329,7 +333,9 @@ class MemoryService:
                 ("expected ctc inr", exp_inr, "number"),
                 ("current ctc", cur_lpa, "number"),
                 ("expected ctc", exp_lpa, "number"),
-                ("notice period", str(profile.professional.notice_period_days), "number"),
+                ("notice period", str(notice_days), "number"),
+                ("notice period in days", str(notice_days), "number"),
+                ("how soon can you join", str(notice_days), "number"),
                 ("current company", profile.professional.current_company, "text"),
                 ("current designation", profile.professional.designation, "text"),
                 ("full name", profile.personal.full_name, "text"),
@@ -360,11 +366,42 @@ class MemoryService:
                 ("backend applications/services hosted on aws", "No experience", "select"),
                 ("hosted on aws", "No experience", "select"),
             ]
+
+            # Dynamically map candidate's excluded skills as 0
+            for ex in (profile.excluded_skills or []):
+                ex_clean = str(ex).strip()
+                if not ex_clean:
+                    continue
+                if ex_clean.lower() == "python":
+                    # Keep "python experience" mapped to Beginner while setting numerical exp to 0
+                    initial_mappings.append((ex_clean.lower(), "0", "number"))
+                    initial_mappings.append((f"years of experience in {ex_clean.lower()}", "0", "number"))
+                    initial_mappings.append((f"how many years of experience do you have in {ex_clean.lower()}", "0", "number"))
+                    continue
+                initial_mappings.append((ex_clean.lower(), "0", "number"))
+                initial_mappings.append((f"{ex_clean.lower()} experience", "0", "number"))
+                initial_mappings.append((f"years of experience in {ex_clean.lower()}", "0", "number"))
+                initial_mappings.append((f"how many years of experience do you have in {ex_clean.lower()}", "0", "number"))
+
+            # Derive frameworks dynamically from candidate skills if Selenium is not present
+            framework_candidates = [
+                s for s in (profile.skills or [])
+                if any(kw in s.lower() for kw in [
+                    'selenium', 'playwright', 'cypress', 'spring', 'react', 'angular',
+                    'vue', 'django', 'fastapi', 'flask', 'express', 'next', 'nest',
+                    'testng', 'cucumber', 'appium', 'robot', 'flutter'
+                ])
+            ]
+            has_selenium = any("selenium" in s.lower() for s in (profile.skills or []))
+            if not has_selenium and framework_candidates:
+                frameworks_str = ", ".join(framework_candidates[:4])
+                initial_mappings.append(("frameworks worked with", frameworks_str, "text"))
+
             saved = self._memory.setdefault("saved_form_answers", {})
             changed = False
             for label, ans, ftype in initial_mappings:
                 norm_k = self._normalize_key(label)
-                if norm_k not in saved or (norm_k in ["race/ethnicity", "race", "ethnicity", "gender", "selenium", "core java", "total it experience", "rest assured", "restassured"] and saved[norm_k]["answer"] != ans):
+                if norm_k not in saved or saved[norm_k].get("answer") != ans:
                     saved[norm_k] = {
                         "answer": ans,
                         "raw_label": label,
@@ -372,6 +409,24 @@ class MemoryService:
                         "updated_at": datetime.now(timezone.utc).isoformat()
                     }
                     changed = True
+
+            # Sync preferences into memory
+            if profile.preferred_locations:
+                self._memory.setdefault("user_preferences", {})["preferred_locations"] = profile.preferred_locations
+                changed = True
+            if profile.preferred_roles:
+                self._memory.setdefault("user_preferences", {})["preferred_roles"] = profile.preferred_roles
+                changed = True
+            if c_lpa > 0:
+                self._memory.setdefault("user_preferences", {})["current_ctc_inr"] = int(c_lpa * 100000)
+                changed = True
+            if e_lpa > 0:
+                self._memory.setdefault("user_preferences", {})["expected_ctc_inr"] = int(e_lpa * 100000)
+                changed = True
+            if notice_days is not None:
+                self._memory.setdefault("user_preferences", {})["notice_period_days"] = notice_days
+                changed = True
+
             if changed:
                 self._save(self._memory)
         except Exception as e:

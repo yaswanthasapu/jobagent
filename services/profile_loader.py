@@ -36,13 +36,17 @@ class ProfileLoader:
 
     def load(self) -> CandidateProfile:
         if not self.profile_path.exists():
-            template_path = Path(__file__).parent.parent / "config" / "candidate_profile.template.json"
+            template_path = Path(__file__).resolve().parent.parent / "config" / "candidate_profile.template.json"
+            if not template_path.exists():
+                template_path = Path(__file__).resolve().parent / "config" / "candidate_profile.template.json"
+            
+            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
             if template_path.exists():
                 import shutil
-                self.profile_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(template_path, self.profile_path)
             else:
-                raise FileNotFoundError(f"Candidate profile not found at {self.profile_path}")
+                with open(self.profile_path, "w", encoding="utf-8") as f:
+                    f.write(CandidateProfile().model_dump_json(indent=2))
 
         with open(self.profile_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)

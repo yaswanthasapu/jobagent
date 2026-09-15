@@ -114,12 +114,25 @@ class SetupService:
         self.console = console or Console()
         self.memory_service = MemoryService()
 
+    @property
+    def profile_path(self) -> Path:
+        return Path(settings.PROFILE_PATH)
+
+    @property
+    def resume_path(self) -> Path:
+        return Path(settings.RESUME_PATH)
+
+    @property
+    def env_path(self) -> Path:
+        return ENV_PATH
+
     def has_configured_profile(self) -> bool:
         """Checks if the user has an existing, non-empty candidate profile configured on this machine."""
-        if not PROFILE_PATH.exists():
+        p_path = self.profile_path
+        if not p_path.exists():
             return False
         try:
-            with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+            with open(p_path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
                 name = data.get("name") or (data.get("personal", {}).get("full_name") if isinstance(data.get("personal"), dict) else "")
                 skills = data.get("skills", [])
@@ -134,7 +147,7 @@ class SetupService:
     def is_setup_complete(self, runtime_api_key: Optional[str] = None, allow_offline: bool = True) -> bool:
         """Checks if the user has already configured their profile, resume, and optional API key."""
         has_profile = self.has_configured_profile()
-        has_resume = RESUME_PATH.exists()
+        has_resume = self.resume_path.exists()
         has_api_key = bool(runtime_api_key or settings.GEMINI_API_KEY or settings.OPENAI_API_KEY or self._get_env_key("GEMINI_API_KEY") or self._get_env_key("OPENAI_API_KEY"))
 
         if allow_offline:
@@ -142,9 +155,10 @@ class SetupService:
         return has_profile and has_resume and has_api_key
 
     def _get_env_key(self, key_name: str) -> Optional[str]:
-        if not ENV_PATH.exists():
+        e_path = self.env_path
+        if not e_path.exists():
             return None
-        with open(ENV_PATH, "r", encoding="utf-8-sig") as f:
+        with open(e_path, "r", encoding="utf-8-sig") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith(f"{key_name}="):
@@ -157,9 +171,10 @@ class SetupService:
         key_type = "OPENAI_API_KEY" if (provider == "openai" or api_key.startswith("sk-")) else "GEMINI_API_KEY"
         lines = []
         key_written = False
+        e_path = self.env_path
 
-        if ENV_PATH.exists():
-            with open(ENV_PATH, "r", encoding="utf-8-sig") as f:
+        if e_path.exists():
+            with open(e_path, "r", encoding="utf-8-sig") as f:
                 for line in f:
                     if line.strip().startswith(f"{key_type}="):
                         lines.append(f"{key_type}={api_key}\n")
@@ -170,7 +185,7 @@ class SetupService:
         if not key_written:
             lines.append(f"{key_type}={api_key}\n")
 
-        with open(ENV_PATH, "w", encoding="utf-8") as f:
+        with open(e_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
         # Update running settings in memory
@@ -471,23 +486,23 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 2. Resume PDF Path
         self.console.print("\n[bold yellow]Step 2: Resume PDF[/bold yellow]")
-        default_resume = str(RESUME_PATH) if RESUME_PATH.exists() else ""
+        default_resume = str(self.resume_path) if self.resume_path.exists() else ""
         resume_input = Prompt.ask(
             "[bold green]Enter path to your Resume PDF[/bold green]",
             default=default_resume or "config/resume.pdf"
         )
         src_resume = Path(resume_input.strip('"').strip("'"))
         if src_resume.exists():
-            RESUME_PATH.parent.mkdir(parents=True, exist_ok=True)
-            if src_resume.resolve() != RESUME_PATH.resolve():
-                shutil.copy2(src_resume, RESUME_PATH)
-            self.console.print(f"[green][OK] Resume configured at {RESUME_PATH.name}![/green]")
+            self.resume_path.parent.mkdir(parents=True, exist_ok=True)
+            if src_resume.resolve() != self.resume_path.resolve():
+                shutil.copy2(src_resume, self.resume_path)
+            self.console.print(f"[green][OK] Resume configured at {self.resume_path.name}![/green]")
         else:
             self.console.print("[yellow]Warning: Provided file not found, creating placeholder resume.[/yellow]")
 
         # 3. Dynamic AI Extraction
         self.console.print("\n[bold cyan]Extracting all details dynamically from your resume using latest Gemini AI...[/bold cyan]")
-        parsed = self.parse_resume_to_dict(RESUME_PATH) if RESUME_PATH.exists() else {}
+        parsed = self.parse_resume_to_dict(self.resume_path) if self.resume_path.exists() else {}
 
         # Display Extracted Summary Table
         self.console.print("\n[bold green]=== Deep Resume Extraction Complete ===[/bold green]")
@@ -521,9 +536,9 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 4. Interactive Confirmation with User
         existing_profile: Optional[CandidateProfile] = None
-        if PROFILE_PATH.exists():
+        if self.profile_path.exists():
             try:
-                with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+                with open(self.profile_path, "r", encoding="utf-8-sig") as f:
                     existing_profile = CandidateProfile(**json.load(f))
             except Exception:
                 pass
@@ -651,14 +666,15 @@ Return ONLY a strictly valid JSON object with schema:
         )
 
         # Save profile
-        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.profile_path, "w", encoding="utf-8") as f:
             f.write(profile.model_dump_json(indent=2))
 
         # Reset singleton cache
         ProfileLoader.reset()
 
-        # Save to agent memory
+        # Save to agent memory & seed all form answers
+        self.memory_service.seed_from_profile(profile)
         self.memory_service.set_preference("current_ctc_inr", cur_ctc_inr)
         self.memory_service.set_preference("expected_ctc_inr", exp_ctc_inr)
         self.memory_service.set_preference("notice_period_days", notice_days)
@@ -673,15 +689,12 @@ Return ONLY a strictly valid JSON object with schema:
         # Helpful guidance panel for new users
         self.console.print(Panel(
             "[bold cyan]📌 Important Notes for New Users:[/bold cyan]\n\n"
-            "1. [bold yellow]🔑 Step 1 - Platform Sign-In (Recommended First):[/bold yellow]\n"
-            "   Select Option [bold cyan][1][/bold cyan] from the main menu to sign into your LinkedIn and/or Naukri accounts.\n"
-            "   A visible browser window opens. Sign in once (complete 2FA/OTP if prompted).\n"
-            "   [dim]Your session cookies are saved permanently in your local browser profile, so you never have to sign in again![/dim]\n\n"
-            "2. [bold green]🚀 Step 2 - Direct Apply to Jobs:[/bold green]\n"
-            "   Select Option [bold cyan][2][/bold cyan] to search and apply autonomously (or enable Safe DRY-RUN mode to test first).\n\n"
-            "3. [bold blue]🖥️ Step 3 - Web Dashboard or AI Chat:[/bold blue]\n"
-            "   Use Option [bold cyan][5][/bold cyan] (`jobagent --ui`) for the Web UI Control Center, or Option [bold cyan][3][/bold cyan] (`jobagent --chat`) for AI conversation.",
-            title="[bold green]Quick Start Guide[/bold green]",
+            "• [bold white]Step 1 in Main Menu:[/bold white] Always use option [bold yellow][1] Sign In / Verify Platform Accounts[/bold yellow] first.\n"
+            "  This opens a visible browser where you log into LinkedIn & Naukri once; sessions are saved permanently.\n"
+            "• [bold white]Step 2 in Main Menu:[/bold white] Use option [bold green][2] Direct Apply[/bold green] to run autonomous applications.\n"
+            "• [bold white]Step 5 in Main Menu:[/bold white] Launch the [bold green]Professional Web UI Dashboard[/bold green] for real-time monitoring.\n"
+            "• [bold white]Step 7 in Main Menu:[/bold white] Modify your salary, experience, or role targets anytime without re-running setup.",
+            title="[bold yellow]Getting Started with JobAgent[/bold yellow]",
             border_style="green"
         ))
 
@@ -693,22 +706,22 @@ Return ONLY a strictly valid JSON object with schema:
 
     async def run_resume_review(self, profile: Optional[CandidateProfile] = None) -> None:
         """Conducts an AI resume review and prints actionable ATS recommendations."""
-        if not RESUME_PATH.exists():
-            self.console.print("[red]No resume PDF found at config/resume.pdf[/red]")
+        if not self.resume_path.exists():
+            self.console.print(f"[red]No resume PDF found at {self.resume_path}[/red]")
             return
 
         if not profile:
-            if not PROFILE_PATH.exists():
+            if not self.profile_path.exists():
                 self.console.print("[red]Candidate profile not found. Run setup first.[/red]")
                 return
-            with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+            with open(self.profile_path, "r", encoding="utf-8-sig") as f:
                 profile = CandidateProfile(**json.load(f))
 
         self.console.print("\n[bold cyan]=== AI Resume Review & Gap Analysis ===[/bold cyan]")
         self.console.print("[dim]Analyzing resume with LLM against ATS benchmarks...[/dim]")
 
         reviewer = ResumeReviewer()
-        review = await reviewer.review_resume(str(RESUME_PATH), profile)
+        review = await reviewer.review_resume(str(self.resume_path), profile)
 
         score = review.get("ats_score", 80)
         score_color = "green" if score >= 80 else "yellow" if score >= 65 else "red"
@@ -751,7 +764,7 @@ Return ONLY a strictly valid JSON object with schema:
             if not self.has_configured_profile():
                 self.console.print("[yellow]No candidate profile configured yet. Run 'jobagent' or 'jobagent --setup' to get started.[/yellow]")
                 return
-            with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+            with open(self.profile_path, "r", encoding="utf-8-sig") as f:
                 profile = CandidateProfile(**json.load(f))
 
         prefs = self.memory_service.get_all_preferences()
@@ -768,37 +781,40 @@ Return ONLY a strictly valid JSON object with schema:
         table.add_row("Location", profile.personal.location or "Not configured")
         table.add_row("Current Title", profile.professional.designation or profile.current_role or "Not configured")
         table.add_row("Current Company", profile.professional.current_company or "Not configured")
-        table.add_row("Total Experience", f"{profile.professional.total_experience_years} Years" if profile.professional.total_experience_years else "Not configured")
 
-        cur_lpa = profile.professional.current_lpa or profile.current_ctc_lpa or 0.0
-        exp_lpa = profile.professional.expected_lpa or profile.expected_ctc_lpa or 0.0
+        exp_years = profile.professional.total_experience_years if profile.professional.total_experience_years is not None else profile.experience_years
+        table.add_row("Total Experience", f"{exp_years} Years" if (exp_years is not None and exp_years > 0) else ("0 Years" if exp_years == 0 else "Not configured"))
+
+        cur_lpa = profile.professional.current_lpa if profile.professional.current_lpa is not None else (profile.current_ctc_lpa or 0.0)
+        exp_lpa = profile.professional.expected_lpa if profile.professional.expected_lpa is not None else (profile.expected_ctc_lpa or 0.0)
         cur_ctc_inr = prefs.get('current_ctc_inr') or (int(cur_lpa * 100000) if cur_lpa > 0 else None)
         exp_ctc_inr = prefs.get('expected_ctc_inr') or (int(exp_lpa * 100000) if exp_lpa > 0 else None)
 
         cur_disp = f"INR {cur_ctc_inr:,} ({cur_lpa} LPA)" if cur_ctc_inr else ("Not specified" if cur_lpa == 0 else f"{cur_lpa} LPA")
         exp_disp = f"INR {exp_ctc_inr:,} ({exp_lpa} LPA)" if exp_ctc_inr else ("Not specified" if exp_lpa == 0 else f"{exp_lpa} LPA")
-        notice_val = profile.professional.notice_period_days or profile.notice_period_days
-        notice_disp = f"{notice_val} Days (~{round(notice_val / 7)} Weeks)" if notice_val else "Not specified"
+        notice_val = profile.professional.notice_period_days if profile.professional.notice_period_days is not None else profile.notice_period_days
+        notice_disp = f"{notice_val} Days (~{round(notice_val / 7)} Weeks)" if (notice_val is not None and notice_val > 0) else ("Immediate (0 Days)" if notice_val == 0 else "Not specified")
 
         table.add_row("Current CTC", cur_disp)
         table.add_row("Expected CTC", exp_disp)
         table.add_row("Notice Period", notice_disp)
         table.add_row("Target Roles", ", ".join(profile.preferred_roles) if profile.preferred_roles else "Not configured")
+        table.add_row("Core Skills", ", ".join(profile.skills[:8]) + (f" (+{len(profile.skills) - 8} more)" if len(profile.skills) > 8 else "") if profile.skills else "Not configured")
         table.add_row("Target Platforms", ", ".join(prefs.get("preferred_platforms", ["linkedin", "naukri"])))
         table.add_row("Default Date Filter", prefs.get("default_date_filter", "24h (Latest)"))
         table.add_row("AI API Key", key_status)
-        table.add_row("Resume File", RESUME_PATH.name if RESUME_PATH.exists() else "Missing")
+        table.add_row("Resume File", self.resume_path.name if self.resume_path.exists() else "Missing")
 
         self.console.print(table)
 
     async def edit_details(self) -> None:
         """Interactive editor to quickly modify specific profile fields without re-running full setup."""
-        if not PROFILE_PATH.exists():
+        if not self.profile_path.exists():
             self.console.print("[yellow]No profile found. Starting setup wizard instead...[/yellow]")
             await self.run_setup_wizard()
             return
 
-        with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+        with open(self.profile_path, "r", encoding="utf-8-sig") as f:
             profile = CandidateProfile(**json.load(f))
 
         prefs = self.memory_service.get_all_preferences()
@@ -810,10 +826,10 @@ Return ONLY a strictly valid JSON object with schema:
         ))
 
         # Optional: Sync fresh details from uploaded resume PDF
-        if RESUME_PATH.exists():
-            if Confirm.ask("Sync & pre-populate details from currently uploaded resume PDF?", default=False):
+        if self.resume_path.exists():
+            if Confirm.ask("Sync & pre-populate details from currently uploaded resume PDF?", default=True):
                 self.console.print("[dim]Re-extracting details from uploaded resume PDF...[/dim]")
-                parsed = self.parse_resume_to_dict(RESUME_PATH)
+                parsed = self.parse_resume_to_dict(self.resume_path)
                 if parsed.get("full_name"):
                     profile.personal.full_name = parsed["full_name"]
                     profile.name = parsed["full_name"]
@@ -828,14 +844,12 @@ Return ONLY a strictly valid JSON object with schema:
                     profile.current_role = parsed["designation"]
                 if parsed.get("current_company"):
                     profile.professional.current_company = parsed["current_company"]
-                if parsed.get("total_experience_years"):
+                if parsed.get("total_experience_years") is not None:
                     exp_val = float(parsed["total_experience_years"])
                     profile.professional.total_experience_years = exp_val
                     profile.experience_years = exp_val
                 if parsed.get("skills"):
-                    for s in parsed["skills"]:
-                        if s not in profile.skills:
-                            profile.skills.append(s)
+                    profile.skills = list(parsed["skills"])
                 if parsed.get("suggested_target_roles"):
                     profile.preferred_roles = list(parsed["suggested_target_roles"])
                     profile.target_roles = list(parsed["suggested_target_roles"])
@@ -851,6 +865,8 @@ Return ONLY a strictly valid JSON object with schema:
         clean_p = re.sub(r'\D', '', phone)
         if clean_p.startswith('91') and len(clean_p) == 12:
             clean_p = clean_p[2:]
+        elif clean_p.startswith('1') and len(clean_p) == 11:
+            clean_p = clean_p[1:]
         phone = clean_p
 
         profile.personal.full_name = name
@@ -863,7 +879,8 @@ Return ONLY a strictly valid JSON object with schema:
         self.console.print("\n[bold yellow]2. Professional Details[/bold yellow]")
         designation = Prompt.ask("Current Designation / Role", default=profile.professional.designation or profile.current_role or "")
         company = Prompt.ask("Current Employer", default=profile.professional.current_company or "")
-        default_exp = str(profile.professional.total_experience_years or profile.experience_years or 1.0)
+        exp_default_val = profile.professional.total_experience_years if profile.professional.total_experience_years is not None else (profile.experience_years if profile.experience_years is not None else 0.0)
+        default_exp = str(exp_default_val)
         try:
             exp_years = float(Prompt.ask("Total Experience in Years", default=default_exp))
         except Exception:
@@ -877,8 +894,8 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 3. CTC
         self.console.print("\n[bold yellow]3. Compensation (CTC)[/bold yellow]")
-        curr_ctc_default = str(prefs.get("current_ctc_inr", int(profile.professional.current_lpa * 100000)))
-        exp_ctc_default = str(prefs.get("expected_ctc_inr", int(profile.professional.expected_lpa * 100000)))
+        curr_ctc_default = str(int(profile.professional.current_lpa * 100000)) if (profile.professional.current_lpa and profile.professional.current_lpa > 0) else str(prefs.get("current_ctc_inr", 0))
+        exp_ctc_default = str(int(profile.professional.expected_lpa * 100000)) if (profile.professional.expected_lpa and profile.professional.expected_lpa > 0) else str(prefs.get("expected_ctc_inr", 0))
         
         cur_raw = Prompt.ask("Current CTC in INR", default=curr_ctc_default)
         exp_raw = Prompt.ask("Expected CTC in INR", default=exp_ctc_default)
@@ -902,7 +919,7 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 4. Notice Period
         self.console.print("\n[bold yellow]4. Notice Period[/bold yellow]")
-        notice_default = str(profile.professional.notice_period_days or 30)
+        notice_default = str(profile.professional.notice_period_days if profile.professional.notice_period_days is not None else 30)
         notice_days = int(Prompt.ask("Notice Period in Calendar Days", default=notice_default))
         profile.professional.notice_period_days = notice_days
         profile.notice_period_days = notice_days
@@ -917,7 +934,7 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 6. Preferred Locations
         self.console.print("\n[bold yellow]6. Preferred Job Locations[/bold yellow]")
-        loc_default = ", ".join(profile.preferred_locations)
+        loc_default = ", ".join(profile.preferred_locations or [profile.personal.location or "Remote"])
         loc_raw = Prompt.ask("Preferred Locations (comma separated)", default=loc_default)
         profile.preferred_locations = [l.strip() for l in loc_raw.split(",") if l.strip()]
 
@@ -934,7 +951,7 @@ Return ONLY a strictly valid JSON object with schema:
 
         # 8. Technical Skills
         self.console.print("\n[bold yellow]8. Core Technical Skills[/bold yellow]")
-        skills_default = ", ".join(profile.skills)
+        skills_default = ", ".join(profile.skills or [])
         skills_raw = Prompt.ask("Skills (comma separated)", default=skills_default)
         profile.skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
 
@@ -947,8 +964,8 @@ Return ONLY a strictly valid JSON object with schema:
         profile.notice_period_days = notice_days
 
         # Save to disk
-        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.profile_path, "w", encoding="utf-8") as f:
             f.write(profile.model_dump_json(indent=2))
 
         # Invalidate singleton cache and seed memory
@@ -969,12 +986,12 @@ Return ONLY a strictly valid JSON object with schema:
             self.console.print(f"[bold red]Error: Resume file '{new_resume_path}' not found or is invalid.[/bold red]")
             return
 
-        RESUME_PATH.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(new_resume_path, RESUME_PATH)
-        self.console.print(f"[bold green][OK] Copied new resume to {RESUME_PATH.name}![/bold green]")
+        self.resume_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(new_resume_path, self.resume_path)
+        self.console.print(f"[bold green][OK] Copied new resume to {self.resume_path.name}![/bold green]")
 
         self.console.print("[dim]Re-extracting candidate details and skills from updated resume with Gemini...[/dim]")
-        parsed = self.parse_resume_to_dict(RESUME_PATH)
+        parsed = self.parse_resume_to_dict(self.resume_path)
 
         # Display Extracted Summary
         self.console.print("\n[bold green]=== Details Extracted from New Resume ===[/bold green]")
@@ -998,8 +1015,8 @@ Return ONLY a strictly valid JSON object with schema:
             self.console.print(f"\n[bold cyan]All Extracted Technical Skills ({len(extracted_skills)}):[/bold cyan]")
             self.console.print(f"[green]{', '.join(extracted_skills)}[/green]")
 
-        if PROFILE_PATH.exists():
-            with open(PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+        if self.profile_path.exists():
+            with open(self.profile_path, "r", encoding="utf-8-sig") as f:
                 profile = CandidateProfile(**json.load(f))
         else:
             profile = CandidateProfile(
@@ -1080,8 +1097,8 @@ Return ONLY a strictly valid JSON object with schema:
             profile.preferred_roles = [r.strip() for r in roles_raw.split(",") if r.strip()]
         profile.target_roles = list(profile.preferred_roles)
 
-        PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.profile_path, "w", encoding="utf-8") as f:
             f.write(profile.model_dump_json(indent=2))
 
         # Invalidate singleton cache and update memory

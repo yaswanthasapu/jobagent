@@ -8,17 +8,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 def _resolve_data_dir() -> Path:
     # 1. Custom environment override
     if os.environ.get("JOBAGENT_HOME"):
-        p = Path(os.environ["JOBAGENT_HOME"])
+        p = Path(os.environ["JOBAGENT_HOME"]).resolve()
         p.mkdir(parents=True, exist_ok=True)
         (p / "config").mkdir(parents=True, exist_ok=True)
         return p
 
-    # 2. Local development source checkout (must have git or tests and not be in site-packages)
+    # 2. Local development checkout: actively running inside the repository directory
     is_installed = "site-packages" in str(BASE_DIR).lower() or "dist-packages" in str(BASE_DIR).lower()
-    if not is_installed and ((BASE_DIR / ".git").exists() or (BASE_DIR / "tests").exists()):
+    if not is_installed and Path.cwd().resolve() == BASE_DIR.resolve():
         return BASE_DIR
 
-    # 3. User home directory ~/.jobagent for global pip installs
+    # 3. Dedicated per-user directory in user's home folder (~/.jobagent)
+    # Guarantees 100% data and profile isolation across different OS users and external users.
     user_dir = Path.home() / ".jobagent"
     user_dir.mkdir(parents=True, exist_ok=True)
     (user_dir / "config").mkdir(parents=True, exist_ok=True)
@@ -73,17 +74,18 @@ def get_browser_user_data_dir() -> Path:
     """
     Resolves the persistent browser profile directory.
     Checks:
-    1. Local current working directory .browser_context (if profile exists)
-    2. Project BASE_DIR / .browser_context (if profile exists)
-    3. Centralized settings.USER_DATA_DIR (e.g. ~/.jobagent/.browser_context)
+    1. Project BASE_DIR / .browser_context (only if actively running inside local dev repository)
+    2. Centralized settings.USER_DATA_DIR (e.g. ~/.jobagent/.browser_context)
     """
-    local_dir = Path(".browser_context").resolve()
-    if (local_dir / "Default").exists():
-        return local_dir
+    is_installed = "site-packages" in str(BASE_DIR).lower() or "dist-packages" in str(BASE_DIR).lower()
+    if not is_installed and Path.cwd().resolve() == BASE_DIR.resolve():
+        local_dir = Path(".browser_context").resolve()
+        if (local_dir / "Default").exists():
+            return local_dir
 
-    base_dir_context = (BASE_DIR / ".browser_context").resolve()
-    if base_dir_context.exists() and (base_dir_context / "Default").exists():
-        return base_dir_context
+        base_dir_context = (BASE_DIR / ".browser_context").resolve()
+        if base_dir_context.exists() and (base_dir_context / "Default").exists():
+            return base_dir_context
 
     central_dir = Path(settings.USER_DATA_DIR).resolve()
     central_dir.mkdir(parents=True, exist_ok=True)
