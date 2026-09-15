@@ -23,6 +23,27 @@ class DecisionType(str, Enum):
 
     __hash__ = str.__hash__
 
+class SkillMatchCategory(str, Enum):
+    DIRECT_MATCH = "DIRECT_MATCH"
+    RELATED_MATCH = "RELATED_MATCH"
+    TRANSFERABLE = "TRANSFERABLE"
+    PARTIAL_MATCH = "PARTIAL_MATCH"
+    MISSING = "MISSING"
+    CONFLICTING = "CONFLICTING"
+
+class RequirementTier(str, Enum):
+    MANDATORY = "MANDATORY"
+    PREFERRED = "PREFERRED"
+    NICE_TO_HAVE = "NICE_TO_HAVE"
+    OPTIONAL = "OPTIONAL"
+    UNKNOWN = "UNKNOWN"
+
+class ClassifiedRequirement(BaseModel):
+    name: str = Field(..., description="Name of required skill or qualification")
+    tier: RequirementTier = Field(default=RequirementTier.MANDATORY, description="Requirement importance tier")
+    category: str = Field(default="skill", description="skill, certification, license, education, tool")
+    min_years: Optional[float] = Field(default=None, description="Minimum years required if specified")
+
 class ExtractedRequirements(BaseModel):
     required_skills: List[str] = Field(default_factory=list, description="Explicit mandatory technical skills required")
     preferred_skills: List[str] = Field(default_factory=list, description="Optional, preferred, or nice-to-have skills")
@@ -30,6 +51,8 @@ class ExtractedRequirements(BaseModel):
     max_experience_years: Optional[float] = Field(default=None, description="Maximum experience if range given (e.g. 5-8)")
     target_role_level: str = Field(default="Mid", description="Entry, Mid, Senior, Lead, Principal, Manager")
     target_designation: str = Field(default="", description="Normalized target role title")
+    job_department: Optional[str] = Field(default=None, description="Inferred department or domain of the job")
+    classified_requirements: List[ClassifiedRequirement] = Field(default_factory=list, description="Structured requirement list with tiers")
     required_location: Optional[str] = Field(default=None, description="Location requirement stated in post")
     work_mode: Optional[str] = Field(default=None, description="Remote, Hybrid, On-site")
     required_notice_days: Optional[int] = Field(default=None, description="Notice period requirement in days if stated")
@@ -38,11 +61,12 @@ class ExtractedRequirements(BaseModel):
 
 class MatchBreakdown(BaseModel):
     # Multi-Factor Sub-Scores
-    technical_fit: float = Field(default=0.0, description="Score 0-100 for technical skill overlap (50% weight)")
+    technical_fit: float = Field(default=0.0, description="Score 0-100 for domain/technical skill overlap (50% weight)")
     experience_fit: float = Field(default=0.0, description="Score 0-100 for experience alignment (20% weight)")
     role_fit: float = Field(default=0.0, description="Score 0-100 for role title & seniority relevance (15% weight)")
     preference_fit: float = Field(default=100.0, description="Score 0-100 for location/mode/salary/notice (10% weight)")
     risk_score: float = Field(default=0.0, description="Risk factor 0-100 where lower is better (5% weight)")
+    domain_fit: float = Field(default=100.0, description="Score 0-100 for department and discipline alignment")
     overall_score: float = Field(..., description="Weighted composite match score 0-100")
     confidence: float = Field(default=85.0, description="Confidence in decision 0-100")
 
@@ -55,6 +79,7 @@ class MatchBreakdown(BaseModel):
     missing_skills: List[str] = Field(default_factory=list, description="Skills required by job not found in candidate profile")
     mandatory_missing_skills: List[str] = Field(default_factory=list, description="Mandatory core skills missing")
     incompatible_skills: List[str] = Field(default_factory=list, description="Explicit incompatible stack skills")
+    skill_classifications: Dict[str, str] = Field(default_factory=dict, description="Detailed match category for each evaluated requirement")
 
     experience_analysis: str = Field(default="", description="Breakdown of candidate exp vs required exp")
     reasoning: str = Field(..., description="Summary explanation of the evaluation decision")
@@ -82,6 +107,8 @@ class JobEvaluationResult(BaseModel):
             "missing_skills": self.match_breakdown.missing_skills,
             "mandatory_missing_skills": self.match_breakdown.mandatory_missing_skills,
             "incompatible_skills": self.match_breakdown.incompatible_skills,
+            "domain_fit": self.match_breakdown.domain_fit,
+            "skill_classifications": self.match_breakdown.skill_classifications,
             "reason": self.match_breakdown.reasoning,
             "confidence": self.match_breakdown.confidence
         }

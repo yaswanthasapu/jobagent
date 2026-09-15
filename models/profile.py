@@ -22,6 +22,15 @@ class JobPreferences(BaseModel):
     easy_apply_only: bool = Field(default=True, description="Target only Easy Apply postings")
     require_human_approval: bool = Field(default=True, description="Pause before final submission for human approval")
 
+class WorkExperience(BaseModel):
+    title: str = Field(default="", description="Job title held")
+    company: str = Field(default="", description="Company or organization name")
+    start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM or YYYY)")
+    end_date: Optional[str] = Field(default=None, description="End date (YYYY-MM, YYYY, or 'Present')")
+    years: Optional[float] = Field(default=None, description="Duration in years")
+    skills_used: List[str] = Field(default_factory=list, description="Skills, tools, or methodologies used in this role")
+    description: Optional[str] = Field(default="", description="Summary of responsibilities and achievements")
+
 class CandidateProfile(BaseModel):
     # Single Source of Truth root attributes
     name: Optional[str] = None
@@ -30,6 +39,14 @@ class CandidateProfile(BaseModel):
     current_ctc_lpa: Optional[float] = None
     expected_ctc_lpa: Optional[float] = None
     notice_period_days: Optional[int] = None
+
+    # Professional domain & dynamic taxonomy
+    detected_department: Optional[str] = Field(default=None, description="Inferred department from resume or skills")
+    user_confirmed_department: Optional[str] = Field(default=None, description="User confirmed or manually selected department")
+    industry: Optional[str] = Field(default=None, description="Industry sector (e.g. Fintech, Healthcare, Tech)")
+    certifications: List[str] = Field(default_factory=list, description="Professional certifications (e.g. CPA, PMP, AWS)")
+    licenses: List[str] = Field(default_factory=list, description="Professional regulatory licenses (e.g. Bar, Medical, PE)")
+    experience_history: List[WorkExperience] = Field(default_factory=list, description="Structured work experience history")
 
     target_roles: List[str] = Field(default_factory=list, description="Target job titles")
     primary_roles: List[str] = Field(default_factory=list, description="Primary focus roles")

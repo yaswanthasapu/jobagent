@@ -17,6 +17,7 @@ class QuestionCategory(str, Enum):
     USER_REQUIRED = "USER_REQUIRED"
     SENSITIVE = "SENSITIVE"
     LEGAL = "LEGAL"
+    REGULATORY = "REGULATORY"
     UNKNOWN = "UNKNOWN"
 
 # Sensitive question patterns requiring careful handling or HITL prompt
@@ -98,14 +99,33 @@ class FormAgent:
         ]):
             return QuestionCategory.SAFE_HEURISTIC
 
+        # 6. REGULATORY: Bar admission, CPA, Medical/Nursing license, Professional Engineer (PE), Security clearance
+        if any(w in label_l for w in [
+            "bar admission", "licensed attorney", "medical license", "registered nurse",
+            "rn license", "cpa", "certified public accountant", "professional engineer",
+            "pe license", "security clearance", "top secret", "ts/sci", "active clearance"
+        ]):
+            return QuestionCategory.REGULATORY
+
         if field.is_required:
             return QuestionCategory.USER_REQUIRED
         return QuestionCategory.UNKNOWN
 
-    def is_user_required(self, field: FormField) -> bool:
+    def is_user_required(self, field: FormField, profile: Optional[CandidateProfile] = None) -> bool:
         """Returns True if the field requires human user confirmation/review."""
         cat = self.classify_question(field)
-        return cat in [QuestionCategory.SENSITIVE, QuestionCategory.LEGAL, QuestionCategory.USER_REQUIRED]
+        if cat in [QuestionCategory.SENSITIVE, QuestionCategory.LEGAL, QuestionCategory.USER_REQUIRED]:
+            return True
+        if cat == QuestionCategory.REGULATORY:
+            # If candidate explicitly holds verified license/certification, human intervention not needed
+            if profile:
+                all_creds = [c.lower() for c in (getattr(profile, "licenses", []) + getattr(profile, "certifications", []))]
+                label_l = field.label.lower()
+                for cred in all_creds:
+                    if cred and (cred in label_l or label_l in cred):
+                        return False
+            return True
+        return False
 
     @property
     def resume_text(self) -> str:
@@ -276,6 +296,27 @@ class FormAgent:
                     return yes_opt, False
                 return field.options[0], False
             return "Yes", False
+
+        # 0D. REGULATORY: Bar admission, CPA, Medical/Nursing license, Professional Engineer (PE), Security clearance
+        cat = self.classify_question(field)
+        if cat == QuestionCategory.REGULATORY:
+            all_creds = [c.lower() for c in (getattr(profile, "licenses", []) + getattr(profile, "certifications", []))]
+            has_license = False
+            for cred in all_creds:
+                if cred and (cred in label_lower or any(w in label_lower for w in cred.split() if len(w) > 3)):
+                    has_license = True
+                    break
+            if has_license:
+                if field.options:
+                    yes_opt = self._find_option_matching(field.options, ["yes", "true", "active", "hold license", "licensed"])
+                    return yes_opt or field.options[0], False
+                return "Yes", False
+            else:
+                # Unverified regulatory licensing requires human review
+                if field.options:
+                    no_opt = self._find_option_matching(field.options, ["no", "false", "do not hold", "not licensed"])
+                    return no_opt or field.options[-1], True
+                return "No", True
 
         # 1. Demographic & Voluntary EEO Self-Identification (Race, Ethnicity, Gender, Disability, Veteran)
         if any(w in label_lower for w in ["race", "ethnicity", "ethnic origin", "demographic"]):
@@ -898,80 +939,127 @@ class FormAgent:
     def _match_skill_experience(self, skill_target: str, profile: CandidateProfile) -> float:
         """
         Calculates nuanced experience for a specific skill from candidate profile and resume.
-        Differentiates primary core stack (full experience), secondary tools (1.0-2.5 yrs),
+        Department-agnostic: Works across Tech, QA, Finance, Marketing, HR, Operations, Healthcare, etc.
+        Differentiates primary core skills (full experience), secondary skills (proportional exp),
         and unpossessed/unlisted skills (0.0 yrs).
         Strictly prevents claiming any excluded skill.
         """
         skill_clean = re.sub(r'[\?\*\:\(\)]', '', skill_target).lower().strip()
-        total_exp = float(profile.professional.total_experience_years)
+        total_exp = float(profile.professional.total_experience_years or profile.experience_years or 0.0)
 
         # 0. Check excluded skills first: strictly return 0.0
         if hasattr(profile, "is_excluded_skill") and profile.is_excluded_skill(skill_clean):
             return 0.0
-        for ex in getattr(profile, "excluded_skills", []):
+        for ex in getattr(profile, "excluded_skills", []) or []:
             ex_l = ex.lower().strip()
-            if ex_l == skill_clean or f" {ex_l} " in f" {skill_clean} ":
+            if ex_l and (ex_l == skill_clean or f" {ex_l} " in f" {skill_clean} " or f" {skill_clean} " in f" {ex_l} "):
                 return 0.0
 
-        # 1. Candidate's primary core stack (Java + Selenium + Test Automation):
-        core_primary = [
+        # 1. Check structured experience history if present:
+        if getattr(profile, "experience_history", None):
+            matching_years = 0.0
+            found_role = False
+            for exp_item in profile.experience_history:
+                skills_in_role = [s.lower() for s in exp_item.skills_used]
+                desc_lower = (exp_item.description or "").lower()
+                title_lower = (exp_item.title or "").lower()
+                if any(skill_clean in s or s in skill_clean for s in skills_in_role) or \
+                   (re.search(rf"\b{re.escape(skill_clean)}\b", desc_lower) or skill_clean in title_lower):
+                    found_role = True
+                    matching_years += (exp_item.years or 1.0)
+            if found_role and matching_years > 0:
+                return min(float(round(matching_years, 1)), total_exp)
+
+        # 2. Check Candidate's Primary Core Skills across any domain:
+        cand_skills_clean = [s.lower().strip() for s in profile.skills]
+        cand_role = (profile.professional.designation or profile.current_role or "").lower()
+        cand_target_roles = [r.lower() for r in (getattr(profile, "target_roles", None) or profile.preferred_roles or [])]
+
+        # Top skills in candidate's inventory
+        top_skills = set(cand_skills_clean[:6]) if cand_skills_clean else set()
+
+        # 2. Candidate's primary core stack across disciplines:
+        core_primary_indicators = [
             "selenium", "selenium webdriver", "core java", "java", "testng",
             "qa automation", "automation testing", "test automation", "software testing",
             "functional testing", "manual testing", "web testing", "regression testing",
-            "test execution", "test planning", "bug tracking"
+            "test execution", "test planning", "bug tracking",
+            "financial modeling", "dcf", "valuation", "seo", "sem", "talent acquisition"
         ]
-        if any(term == skill_clean or term in skill_clean for term in core_primary):
+
+        # Explicit primary matches get full experience:
+        if (any(term == skill_clean or term in skill_clean for term in core_primary_indicators) and
+            any(term in s for term in core_primary_indicators for s in cand_skills_clean[:6])) or \
+           (cand_role and (skill_clean in cand_role or (len(skill_clean) >= 4 and cand_role in skill_clean))):
             return float(round(total_exp)) if abs(total_exp - 3.9) < 0.2 else total_exp
 
-        # 2. Secondary API Testing & Frameworks:
-        if any(term in skill_clean for term in ["rest assured", "restassured", "rest-assured", "api testing", "postman", "soapui", "web services"]):
-            has_api = any(any(k in s.lower() for k in ["rest assured", "restassured", "api testing", "postman"]) for s in profile.skills)
-            if has_api or (self.resume_text and re.search(r'\b(rest\s*assured|postman|api\s*testing)\b', self.resume_text, re.I)):
-                return min(2.5, total_exp) if total_exp > 0 else 0.0
-
-        # 3. Database / SQL:
-        if any(term in skill_clean for term in ["sql", "mysql", "database", "rdbms", "queries"]):
-            has_sql = any("sql" in s.lower() for s in profile.skills)
-            if has_sql or (self.resume_text and re.search(r'\b(sql|mysql|database)\b', self.resume_text, re.I)):
-                return min(2.0, total_exp) if total_exp > 0 else 0.0
-
-        # 4. Secondary Programming / Scripting Languages:
-        if any(term in skill_clean for term in ["javascript", "typescript", "playwright"]):
-            has_js = any(any(k in s.lower() for k in ["javascript", "typescript", "playwright"]) for s in profile.skills)
-            if has_js or (self.resume_text and re.search(r'\b(javascript|playwright|typescript)\b', self.resume_text, re.I)):
+        # 3. Secondary Tools and Frameworks across domains
+        # Secondary Programming / Scripting Languages & Automation Frameworks:
+        if any(term in skill_clean for term in ["javascript", "typescript", "playwright", "cypress"]):
+            has_js = any(any(k in s for k in ["javascript", "typescript", "playwright", "cypress"]) for s in cand_skills_clean)
+            if has_js or (self.resume_text and re.search(r'\b(javascript|playwright|typescript|cypress)\b', self.resume_text, re.I)):
                 return min(2.0, total_exp) if total_exp > 0 else 0.0
             return 0.0
 
-        # 5. Version Control & Agile Management Tools:
+        # API Testing
+        if any(term in skill_clean for term in ["rest assured", "restassured", "rest-assured", "api testing", "postman", "soapui", "web services"]):
+            has_api = any(any(k in s for k in ["rest assured", "restassured", "api testing", "postman"]) for s in cand_skills_clean)
+            if has_api or (self.resume_text and re.search(r'\b(rest\s*assured|postman|api\s*testing)\b', self.resume_text, re.I)):
+                return min(2.5, total_exp) if total_exp > 0 else 0.0
+
+        # Database / SQL
+        if any(term in skill_clean for term in ["sql", "mysql", "database", "rdbms", "queries"]):
+            has_sql = any("sql" in s for s in cand_skills_clean)
+            if has_sql or (self.resume_text and re.search(r'\b(sql|mysql|database)\b', self.resume_text, re.I)):
+                return min(2.0, total_exp) if total_exp > 0 else 0.0
+
+        # Version Control & Agile
         if any(term in skill_clean for term in ["git", "github", "gitlab", "jira", "agile", "scrum"]):
             return min(3.0, total_exp) if total_exp > 0 else 0.0
 
-        # 6. CI/CD & Build Tools:
+        # CI/CD & Build
         if any(term in skill_clean for term in ["jenkins", "ci/cd", "maven", "pipeline"]):
-            has_build = any(any(k in s.lower() for k in ["jenkins", "ci/cd", "maven"]) for s in profile.skills)
+            has_build = any(any(k in s for k in ["jenkins", "ci/cd", "maven"]) for s in cand_skills_clean)
             if has_build or (self.resume_text and re.search(r'\b(jenkins|maven|ci/cd)\b', self.resume_text, re.I)):
                 return min(2.0, total_exp) if total_exp > 0 else 0.0
 
-        # 7. Cloud / DevOps / Containers:
+        # Cloud & Containers
         if any(term in skill_clean for term in ["docker", "kubernetes", "aws", "azure", "gcp", "cloud", "linux"]):
-            has_devops = any(any(k in s.lower() for k in ["docker", "kubernetes", "aws", "azure", "linux"]) for s in profile.skills)
+            has_devops = any(any(k in s for k in ["docker", "kubernetes", "aws", "azure", "linux"]) for s in cand_skills_clean)
             if has_devops or (self.resume_text and re.search(r'\b(docker|kubernetes|aws|linux)\b', self.resume_text, re.I)):
                 return min(1.0, total_exp) if total_exp > 0 else 0.0
             return 0.0
 
-        # 8. Exact match against candidate's profile skills list:
+        # Finance Tools
+        if any(term in skill_clean for term in ["excel", "spreadsheets", "vba"]):
+            has_excel = any("excel" in s for s in cand_skills_clean)
+            if has_excel or (self.resume_text and re.search(r'\b(excel|spreadsheets)\b', self.resume_text, re.I)):
+                return min(3.0, total_exp) if total_exp > 0 else 0.0
+
+        if any(term in skill_clean for term in ["quickbooks", "xero", "bookkeeping"]):
+            has_qb = any(any(k in s for k in ["quickbooks", "xero", "bookkeeping"]) for s in cand_skills_clean)
+            if has_qb or (self.resume_text and re.search(r'\b(quickbooks|xero)\b', self.resume_text, re.I)):
+                return min(2.0, total_exp) if total_exp > 0 else 0.0
+
+        # Marketing Tools
+        if any(term in skill_clean for term in ["google analytics", "ga4", "google ads", "hubspot"]):
+            has_mkt = any(any(k in s for k in ["google analytics", "ga4", "google ads", "hubspot"]) for s in cand_skills_clean)
+            if has_mkt or (self.resume_text and re.search(r'\b(google\s*analytics|hubspot|google\s*ads)\b', self.resume_text, re.I)):
+                return min(2.0, total_exp) if total_exp > 0 else 0.0
+
+        # 4. Exact or alias match against candidate's profile skills list:
         for cand_skill in profile.skills:
             cs_clean = cand_skill.lower().strip()
             if cs_clean == skill_clean or cs_clean in skill_clean or skill_clean in cs_clean:
                 return min(2.0, total_exp)
 
-        # 9. Direct keyword match in candidate's uploaded resume text:
+        # 5. Direct keyword match in candidate's uploaded resume text:
         if self.resume_text:
             resume_lower = self.resume_text.lower()
             if len(skill_clean) >= 3 and re.search(rf"\b{re.escape(skill_clean)}\b", resume_lower):
                 return min(1.5, total_exp)
 
-        # 10. Unmatched / unpossessed skill:
+        # 6. Unmatched / unpossessed skill:
         return 0.0
 
     def _find_option_matching(self, options: List[str], patterns: List[str]) -> Optional[str]:

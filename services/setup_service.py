@@ -46,11 +46,63 @@ TECH_TAXONOMY: List[str] = [
 ]
 
 def synthesize_target_roles(designation: str, skills: List[str]) -> List[str]:
-    """Dynamically derives target job roles strictly from the candidate's actual skills and title."""
+    """Dynamically derives target job roles strictly from the candidate's actual skills and title across any profession."""
     skills_lower = {s.lower() for s in skills}
     title_lower = designation.lower() if designation else ""
     roles: List[str] = []
 
+    # Finance & Accounting
+    is_finance = (
+        any(s in skills_lower for s in ['financial analyst', 'financial modeling', 'fp&a', 'accounting', 'accountant', 'auditing', 'quickbooks', 'valuation', 'cpa', 'cfa', 'sap fi', 'bookkeeping', 'taxation'])
+        or any(w in title_lower for w in ['finance', 'financial', 'accountant', 'accounting', 'auditor', 'fp&a'])
+    )
+    # Marketing & Growth
+    is_marketing = (
+        any(s in skills_lower for s in ['seo', 'sem', 'google ads', 'content marketing', 'digital marketing', 'social media marketing', 'copywriting', 'email marketing', 'brand marketing', 'growth marketing'])
+        or any(w in title_lower for w in ['marketing', 'growth', 'seo', 'content writer', 'copywriter'])
+    )
+    # Sales & Business Development
+    is_sales = (
+        any(s in skills_lower for s in ['salesforce', 'hubspot', 'crm', 'b2b sales', 'account management', 'lead generation', 'cold calling', 'pipeline management'])
+        or any(w in title_lower for w in ['sales', 'account executive', 'business development', 'sdr', 'bdr'])
+    )
+    # Human Resources & Recruiting
+    is_hr = (
+        any(s in skills_lower for s in ['talent acquisition', 'recruiter', 'recruiting', 'workday', 'bamboohr', 'payroll', 'employee relations', 'onboarding', 'hris', 'human resources'])
+        or any(w in title_lower for w in ['hr', 'human resources', 'recruiter', 'talent acquisition'])
+    )
+    # Operations & Supply Chain
+    is_ops = (
+        any(s in skills_lower for s in ['supply chain', 'logistics', 'procurement', 'inventory management', 'vendor management', 'six sigma', 'warehouse management'])
+        or any(w in title_lower for w in ['operations', 'supply chain', 'logistics', 'procurement'])
+    )
+    # Product & Project Management
+    is_product = (
+        any(s in skills_lower for s in ['product management', 'product manager', 'scrum master', 'agile coach', 'pmp', 'roadmapping', 'user stories', 'backlog grooming'])
+        or any(w in title_lower for w in ['product manager', 'project manager', 'scrum master', 'agile coach', 'pmp'])
+    )
+    # Design & UI/UX
+    is_design = (
+        any(s in skills_lower for s in ['figma', 'sketch', 'adobe xd', 'wireframing', 'prototyping', 'user research', 'ui/ux', 'ux design', 'interaction design'])
+        or any(w in title_lower for w in ['designer', 'ui/ux', 'ux', 'graphic designer'])
+    )
+    # Healthcare & Medicine
+    is_health = (
+        any(s in skills_lower for s in ['patient care', 'nursing', 'registered nurse', 'clinical', 'hospital', 'bls', 'acls', 'ehr', 'epic systems', 'medical terminology'])
+        or any(w in title_lower for w in ['nurse', 'nursing', 'clinical', 'physician', 'healthcare'])
+    )
+    # Legal & Compliance
+    is_legal = (
+        any(s in skills_lower for s in ['litigation', 'paralegal', 'contract review', 'regulatory compliance', 'legal research', 'intellectual property', 'gdpr compliance'])
+        or any(w in title_lower for w in ['legal', 'attorney', 'counsel', 'paralegal', 'compliance'])
+    )
+    # Hardware / Civil / Mechanical Engineering
+    is_eng = (
+        any(s in skills_lower for s in ['solidworks', 'autocad', 'catia', 'circuit design', 'structural analysis', 'hvac', 'plc', 'matlab'])
+        or any(w in title_lower for w in ['mechanical engineer', 'civil engineer', 'electrical engineer', 'hardware engineer'])
+    )
+
+    # Tech domains
     is_qa = (
         any(s in skills_lower for s in ['selenium', 'playwright', 'cypress', 'testng', 'cucumber', 'appium', 'jmeter', 'manual testing', 'automation testing', 'test automation', 'restassured', 'rest assured'])
         or any(w in title_lower for w in ['qa', 'sdet', 'test', 'quality'])
@@ -61,19 +113,47 @@ def synthesize_target_roles(designation: str, skills: List[str]) -> List[str]:
     )
     is_frontend = (
         any(s in skills_lower for s in ['react', 'angular', 'vue', 'javascript', 'typescript', 'html', 'css', 'nextjs', 'tailwind', 'redux'])
-        or 'frontend' in title_lower or 'ui' in title_lower
+        or 'frontend' in title_lower or 'ui engineer' in title_lower
     )
     is_devops = (
         any(s in skills_lower for s in ['docker', 'kubernetes', 'jenkins', 'terraform', 'ansible', 'ci/cd', 'aws', 'azure', 'gcp'])
         or any(w in title_lower for w in ['devops', 'cloud', 'sre'])
     )
     is_data = (
-        any(s in skills_lower for s in ['pandas', 'numpy', 'spark', 'hadoop', 'machine learning', 'deep learning', 'pytorch', 'tensorflow', 'scikit-learn'])
+        any(s in skills_lower for s in ['pandas', 'numpy', 'spark', 'hadoop', 'machine learning', 'deep learning', 'pytorch', 'tensorflow', 'scikit-learn', 'power bi', 'tableau'])
         or 'data' in title_lower or 'ml' in title_lower
     )
 
+    # Route target roles based on detected disciplines
     if is_qa and not is_backend:
         roles.extend(['QA Automation Engineer', 'SDET', 'Test Automation Engineer'])
+    elif is_finance:
+        roles.extend(['Financial Analyst', 'Senior Financial Analyst', 'Finance Specialist', 'Staff Accountant'])
+    elif is_marketing:
+        roles.extend(['Digital Marketing Specialist', 'Marketing Specialist', 'Growth Marketer', 'Content Strategist'])
+    elif is_sales:
+        roles.extend(['Account Executive', 'Business Development Manager', 'Sales Specialist'])
+    elif is_hr:
+        roles.extend(['HR Generalist', 'Talent Acquisition Specialist', 'Human Resources Specialist'])
+    elif is_ops:
+        roles.extend(['Operations Manager', 'Supply Chain Analyst', 'Operations Specialist'])
+    elif is_product:
+        roles.extend(['Product Manager', 'Technical Product Manager', 'Project Manager', 'Scrum Master'])
+    elif is_design:
+        roles.extend(['UX Designer', 'UI/UX Designer', 'Product Designer'])
+    elif is_health:
+        roles.extend(['Registered Nurse', 'Clinical Specialist', 'Healthcare Coordinator'])
+    elif is_legal:
+        roles.extend(['Legal Counsel', 'Corporate Counsel', 'Paralegal', 'Compliance Specialist'])
+    elif is_eng:
+        if 'mechanical' in title_lower:
+            roles.extend(['Mechanical Engineer', 'Design Engineer', 'Mechanical Systems Engineer'])
+        elif 'civil' in title_lower:
+            roles.extend(['Civil Engineer', 'Structural Engineer', 'Project Engineer'])
+        elif 'electrical' in title_lower:
+            roles.extend(['Electrical Engineer', 'Hardware Engineer', 'Electronics Engineer'])
+        else:
+            roles.extend(['Engineering Specialist', 'Project Engineer'])
     elif is_backend and is_frontend:
         roles.extend(['Full Stack Engineer', 'Full Stack Developer', 'Software Engineer', 'Backend Engineer'])
     elif is_backend:
@@ -88,13 +168,13 @@ def synthesize_target_roles(designation: str, skills: List[str]) -> List[str]:
     elif is_devops:
         roles.extend(['DevOps Engineer', 'Cloud Engineer', 'Site Reliability Engineer'])
     elif is_data:
-        roles.extend(['Data Engineer', 'Machine Learning Engineer'])
+        roles.extend(['Data Engineer', 'Data Analyst', 'Machine Learning Engineer'])
 
     if not roles:
-        if designation and designation not in ['Software Professional', 'Candidate']:
-            roles = [designation, f'Senior {designation}', 'Software Engineer']
+        if designation and designation.lower() not in ['software professional', 'candidate', 'professional']:
+            roles = [designation, f'Senior {designation}', f'Lead {designation}']
         else:
-            roles = ['Software Engineer', 'Full Stack Engineer', 'Backend Engineer']
+            roles = ['Specialist', 'Consultant', 'Manager']
 
     seen = set()
     deduped = []
@@ -370,9 +450,21 @@ class SetupService:
                 deduped_heur.append(s)
         parsed["skills"] = deduped_heur
 
-        # Designation fallback scan across roles
+        # Designation fallback scan across multi-department roles
         if not parsed.get("designation"):
-            for t in ["QA Automation Engineer", "Software Development Engineer in Test", "SDET", "Software Test Engineer", "Backend Developer", "Java Developer", "Frontend Developer", "Full Stack Developer", "Software Engineer", "DevOps Engineer"]:
+            for t in [
+                "QA Automation Engineer", "Software Development Engineer in Test", "SDET", "Software Test Engineer",
+                "Backend Developer", "Java Developer", "Frontend Developer", "Full Stack Developer", "Software Engineer", "DevOps Engineer",
+                "Financial Analyst", "Staff Accountant", "Accountant", "Finance Manager",
+                "Digital Marketing Specialist", "Marketing Manager", "Growth Marketer",
+                "HR Generalist", "Talent Acquisition Specialist", "Recruiter",
+                "Operations Manager", "Supply Chain Analyst",
+                "Product Manager", "Project Manager", "Scrum Master",
+                "UI/UX Designer", "Product Designer",
+                "Registered Nurse", "Clinical Specialist",
+                "Legal Counsel", "Paralegal", "Compliance Officer",
+                "Mechanical Engineer", "Civil Engineer", "Electrical Engineer"
+            ]:
                 if re.search(r'\b' + re.escape(t) + r'\b', normalized_text, re.IGNORECASE):
                     parsed["designation"] = t
                     break
@@ -380,7 +472,7 @@ class SetupService:
         # 2. Dynamic AI extraction with latest Gemini models
         llm = LLMService()
         if llm.can_use_llm():
-            prompt = f"""You are an elite ATS technical resume parser. Extract ALL candidate details and EVERY single technical skill from this resume text:
+            prompt = f"""You are an elite ATS resume parser supporting all industries and professions (Technology, Finance, Marketing, Operations, HR, Healthcare, Legal, Engineering, etc.). Extract ALL candidate details, skills, competencies, certifications, and licenses from this resume text:
 \"\"\"
 {normalized_text[:8000]}
 \"\"\"
@@ -397,7 +489,10 @@ Return ONLY a strictly valid JSON object with schema:
   "current_ctc_inr": integer in INR or null if not explicitly mentioned,
   "expected_ctc_inr": integer in INR or null if not explicitly mentioned,
   "notice_period_days": integer in calendar days (e.g. 30, 60, 90) or null if not mentioned,
-  "skills": ["Extract EVERY SINGLE technical skill, programming language, framework, database, tool, cloud technology, library, or protocol mentioned in the resume. Do NOT omit or truncate any skills!"],
+  "skills": ["Extract EVERY professional skill, domain competency, tool, framework, or methodology mentioned. Do NOT omit or truncate any skills!"],
+  "certifications": ["List any professional certifications (e.g. CPA, PMP, AWS Certified, CFA, Scrum Master)"],
+  "licenses": ["List any professional or regulatory licenses (e.g. State Bar, Registered Nurse, PE License)"],
+  "detected_department": "Inferred department (e.g. Engineering, Quality Assurance, Finance, Marketing, Human Resources, Operations, Healthcare, Legal, etc.)",
   "suggested_target_roles": ["3 to 5 high-fit target job titles matching candidate's actual primary skills and designation"],
   "highest_education": "Degree, major, and institution name"
 }}"""
@@ -669,6 +764,9 @@ Return ONLY a strictly valid JSON object with schema:
             target_roles=preferred_roles,
             preferred_roles=preferred_roles,
             preferred_locations=preferred_locations,
+            detected_department=parsed.get("detected_department"),
+            certifications=parsed.get("certifications") or [],
+            licenses=parsed.get("licenses") or [],
             job_preferences=JobPreferences(minimum_match_score=60.0, easy_apply_only=True, require_human_approval=True)
         )
 
@@ -1065,6 +1163,12 @@ Return ONLY a strictly valid JSON object with schema:
             exp_num = float(parsed["total_experience_years"])
             profile.professional.total_experience_years = exp_num
             profile.experience_years = exp_num
+        if parsed.get("detected_department"):
+            profile.detected_department = parsed["detected_department"]
+        if parsed.get("certifications"):
+            profile.certifications = parsed["certifications"]
+        if parsed.get("licenses"):
+            profile.licenses = parsed["licenses"]
 
         # Prompt user to confirm or edit details
         self.console.print("\n[bold yellow]Please review and confirm details extracted from new resume:[/bold yellow]")

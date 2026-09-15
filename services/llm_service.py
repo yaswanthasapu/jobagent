@@ -403,7 +403,7 @@ Respond ONLY with a valid JSON object formatted as:
             return -1.0
 
         jd_excerpt = f"\nTarget Job Context:\n{job_description[:1000]}\n" if job_description else ""
-        prompt = f"""You are an expert technical recruiting AI evaluating a candidate's experience for a job application question.
+        prompt = f"""You are an expert talent acquisition and recruiting AI evaluating a candidate's experience for a job application question.
 
 Question: "How many years of experience do you have with {skill}?"
 Target Skill: "{skill}"
@@ -414,8 +414,8 @@ Candidate Profile & Resume Context:
 {jd_excerpt}
 
 Evaluation Rules:
-1. If "{skill}" is part of the candidate's core primary stack throughout their career (e.g. Core Java, Selenium for a QA automation engineer with {total_experience_years} yrs total), return {total_experience_years} or close to it.
-2. If "{skill}" is a secondary tool, library, or used in a subset of projects (e.g. Python scripting, SQL, Postman, Git, CI/CD), return a realistic value (typically 1.0 to 2.5 years), never exceeding {total_experience_years}.
+1. If "{skill}" is part of the candidate's primary core discipline and experience throughout their career, return {total_experience_years} or close to it.
+2. If "{skill}" is a secondary tool, methodology, or used in a subset of projects, return a realistic value (typically 1.0 to 2.5 years), never exceeding {total_experience_years}.
 3. If "{skill}" is absent from the candidate's resume, skills list, and project descriptions, return 0.0.
 4. Return strictly a JSON object with one key "years" as a float or int:
 {{"years": 2.0}}
@@ -458,17 +458,19 @@ Evaluation Rules:
 
 
     async def _extract_with_llm(self, job_title: str, job_description: str) -> ExtractedRequirements:
-        prompt = f"""You are an expert technical recruiting AI. Analyze the following job posting:
+        prompt = f"""You are an expert talent acquisition and recruiting AI. Analyze the following job posting across any professional discipline (Engineering, QA, Finance, Marketing, HR, Operations, Healthcare, Legal, etc.):
 Job Title: {job_title}
 Job Description:
 {job_description[:4500]}
 
 Extract the requirements as a strictly formatted JSON object with these keys:
-- "required_skills": list of technical skills (e.g. ["Selenium", "Java", "Playwright", "API Testing"])
+- "required_skills": list of required skills, tools, or qualifications
+- "preferred_skills": list of preferred, bonus, or nice-to-have skills
 - "min_experience_years": float representing minimum years of experience required (e.g. 4.0). If no experience is specified, use 0.0.
 - "max_experience_years": float or null if an experience range is given (e.g. 5-8 -> 8.0).
-- "target_role_level": string ("Entry", "Mid", "Senior", "Lead", "Architect")
-- "target_designation": normalized job title (e.g. "QA Automation Engineer")
+- "target_role_level": string ("Entry", "Mid", "Senior", "Lead", "Architect", "Manager", "Director")
+- "target_designation": normalized job title (e.g. "{job_title}")
+- "job_department": inferred department (e.g. "Software Engineering", "Quality Assurance", "Finance", "Marketing", "Human Resources", "Operations", "Healthcare", "Legal")
 
 JSON:"""
 
@@ -578,15 +580,31 @@ Answer:"""
         elif simple_match:
             min_exp = float(simple_match.group(1))
 
-        # 2. Extract Technical Skills (Separating Required vs Preferred)
+        # 2. Extract Technical & Domain Skills (Separating Required vs Preferred)
         skill_catalog = [
+            # Tech & Development
             "selenium", "playwright", "cypress", "appium", "java", "python", "typescript",
             "javascript", "c#", ".net", "dotnet", "csharp", "specflow", "pytest", "pyunit",
             "robot framework", "ruby", "golang", "php", "testng", "cucumber", "junit",
             "restassured", "postman", "sql", "mysql", "postgresql", "jenkins", "git",
             "github actions", "docker", "kubernetes", "jmeter", "api testing", "automation testing",
             "bdd", "tdd", "ci/cd", "rest", "soap", "soapui", "linux", "aws", "azure", "jira",
-            "agile", "scrum", "performance testing", "loadrunner", "gatling"
+            "agile", "scrum", "performance testing", "loadrunner", "gatling", "react", "node", "angular", "vue",
+            # Finance & Accounting
+            "financial modeling", "dcf", "valuation", "excel", "gaap", "ifrs", "budgeting",
+            "forecasting", "fp&a", "quickbooks", "auditing", "tax", "variance analysis", "cash flow",
+            # Marketing & Sales
+            "seo", "sem", "google ads", "ppc", "google analytics", "content marketing",
+            "social media marketing", "email marketing", "hubspot", "copywriting", "lead generation",
+            # Human Resources
+            "talent acquisition", "recruiting", "sourcing", "onboarding", "hris", "workday",
+            "employee relations", "payroll", "compensation",
+            # Operations & Engineering
+            "supply chain", "logistics", "procurement", "lean", "six sigma", "inventory management",
+            "cad", "solidworks", "autocad", "matlab",
+            # Healthcare & Legal
+            "patient care", "clinical operations", "emr", "ehr", "hipaa",
+            "contract management", "compliance", "regulatory compliance", "due diligence"
         ]
 
         # Identify preferred / nice-to-have section if present
@@ -598,10 +616,11 @@ Answer:"""
         pref_text = pref_section_match.group(1).lower() if pref_section_match else ""
 
         def normalize_skill_name(s: str) -> str:
-            if s in ["sql", "bdd", "tdd", "ci/cd", "api testing", "jira", "aws", "c#", ".net"]:
+            upper_skills = {"sql", "bdd", "tdd", "ci/cd", "api testing", "jira", "aws", "c#", ".net", "dcf", "gaap", "ifrs", "fp&a", "seo", "sem", "ppc", "hris", "cad", "emr", "ehr", "hipaa"}
+            if s in upper_skills:
                 return "C#" if s in ["c#", "csharp"] else (".NET" if s in [".net", "dotnet"] else s.upper())
-            elif s in ["playwright", "selenium", "postman", "docker", "jenkins", "jmeter", "restassured", "pytest", "specflow", "soapui"]:
-                return "RestAssured" if s == "restassured" else ("PyTest" if s == "pytest" else ("SpecFlow" if s == "specflow" else ("SoapUI" if s == "soapui" else s.capitalize())))
+            elif s in ["playwright", "selenium", "postman", "docker", "jenkins", "jmeter", "restassured", "pytest", "specflow", "soapui", "quickbooks", "hubspot", "workday", "solidworks", "autocad", "matlab"]:
+                return "RestAssured" if s == "restassured" else ("PyTest" if s == "pytest" else ("SpecFlow" if s == "specflow" else ("SoapUI" if s == "soapui" else ("QuickBooks" if s == "quickbooks" else ("HubSpot" if s == "hubspot" else ("Workday" if s == "workday" else ("SolidWorks" if s == "solidworks" else s.capitalize())))))))
             return s.title()
 
         found_required = []
@@ -625,7 +644,28 @@ Answer:"""
         elif any(w in title_lower for w in ["junior", "jr.", "entry", "intern", "associate"]):
             level = "Entry"
 
-        # 4. Location & Work Mode
+        # 4. Infer Job Department
+        job_dept = None
+        if any(w in title_lower for w in ["qa", "test", "quality", "sdet"]):
+            job_dept = "Quality Assurance"
+        elif any(w in title_lower for w in ["finance", "financial", "accounting", "accountant", "audit", "tax", "fp&a"]):
+            job_dept = "Finance & Accounting"
+        elif any(w in title_lower for w in ["marketing", "seo", "sem", "content", "growth", "brand"]):
+            job_dept = "Marketing"
+        elif any(w in title_lower for w in ["sales", "bdr", "sdr", "account executive"]):
+            job_dept = "Sales"
+        elif any(w in title_lower for w in ["hr", "human resources", "recruiter", "talent"]):
+            job_dept = "Human Resources"
+        elif any(w in title_lower for w in ["operations", "supply chain", "logistics"]):
+            job_dept = "Operations"
+        elif any(w in title_lower for w in ["nurse", "clinical", "medical", "patient"]):
+            job_dept = "Healthcare"
+        elif any(w in title_lower for w in ["legal", "counsel", "compliance"]):
+            job_dept = "Legal"
+        elif any(w in title_lower for w in ["engineer", "developer", "architect", "devops", "cloud"]):
+            job_dept = "Software Engineering"
+
+        # 5. Location & Work Mode
         req_loc = None
         for loc in ["hyderabad", "bangalore", "bengaluru", "pune", "chennai", "mumbai", "delhi", "noida", "gurgaon", "gurugram", "kolkata"]:
             if loc in combined:
@@ -640,7 +680,7 @@ Answer:"""
         elif "on-site" in combined or "onsite" in combined or "work from office" in combined:
             work_mode = "On-site"
 
-        # 5. Notice Period
+        # 6. Notice Period
         notice_days = None
         if re.search(r'\b(immediate\s*joiners?|join\s*immediately|immediate\s*joining|0[- ]15\s*days?)\b', combined):
             notice_days = 0
@@ -648,14 +688,12 @@ Answer:"""
             notice_days = 15
         elif re.search(r'\b(30\s*days?|1\s*month)\b', combined):
             notice_days = 30
-        elif re.search(r'\b45\s*days?\b', combined):
-            notice_days = 45
         elif re.search(r'\b(60\s*days?|2\s*months?)\b', combined):
             notice_days = 60
         elif re.search(r'\b(90\s*days?|3\s*months?)\b', combined):
             notice_days = 90
 
-        # 6. Salary
+        # 7. Salary
         min_sal = None
         max_sal = None
         sal_range = re.search(r'(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(?:lpa|lakhs|lakh|lac|lacs)', combined)
@@ -674,6 +712,7 @@ Answer:"""
             max_experience_years=max_exp,
             target_role_level=level,
             target_designation=job_title.strip(),
+            job_department=job_dept,
             required_location=req_loc,
             work_mode=work_mode,
             required_notice_days=notice_days,
