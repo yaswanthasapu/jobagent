@@ -75,3 +75,50 @@ def test_profile_role_and_location_matching(sample_profile_json: Path):
     assert loader.matches_location("Hyderabad, India") is True
     assert loader.matches_location("Bangalore Urban") is True
     assert loader.matches_location("Remote") is True
+
+def test_legacy_profile_purge_on_external_machine(tmp_path: Path, monkeypatch):
+    # Simulate an external user who previously had legacy 1.0.25 defaults on disk
+    legacy_data = {
+        "name": "Yaswanth Asapu",
+        "current_role": "QA Engineer",
+        "experience_years": 3.9,
+        "current_ctc_lpa": 8.9,
+        "expected_ctc_lpa": 12.0,
+        "notice_period_days": 60,
+        "skills": ["Selenium WebDriver", "Java", "Playwright"],
+        "personal": {
+            "full_name": "Yaswanth Asapu",
+            "email": "yaswanth901@gmail.com",
+            "phone": "6281306458",
+            "location": "Hyderabad, Telangana, India"
+        },
+        "professional": {
+            "designation": "QA Engineer",
+            "current_company": "Magellanic-Cloud",
+            "total_experience_years": 3.9
+        }
+    }
+    legacy_file = tmp_path / "candidate_profile.json"
+    legacy_file.write_text(json.dumps(legacy_data), encoding="utf-8")
+
+    # Simulate running on external machine by setting BASE_DIR to a different folder
+    from config.settings import settings
+    monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
+
+    loader = ProfileLoader(str(legacy_file))
+    profile = loader.profile
+
+    # Verify that legacy developer data is completely purged
+    assert profile.name == ""
+    assert profile.personal.full_name == ""
+    assert profile.personal.email == ""
+    assert profile.personal.phone == ""
+    assert profile.professional.current_company == ""
+    assert profile.skills == []
+
+    # Verify that SetupService detects it as unconfigured
+    from services.setup_service import SetupService
+    service = SetupService()
+    monkeypatch.setattr(SetupService, "profile_path", property(lambda s: legacy_file))
+    assert service.has_configured_profile() is False
+

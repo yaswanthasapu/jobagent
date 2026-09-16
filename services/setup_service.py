@@ -218,7 +218,12 @@ class SetupService:
                 skills = data.get("skills", [])
                 if not name or not str(name).strip() or not skills:
                     return False
-                if str(name).strip().lower() in ["", "candidate", "your name", "software professional"]:
+                unconfigured_names = ["", "candidate", "your name", "software professional"]
+                is_installed = "site-packages" in str(settings.BASE_DIR).lower() or "dist-packages" in str(settings.BASE_DIR).lower()
+                is_external = is_installed or (Path.home() / ".jobagent") in p_path.parents or str(settings.BASE_DIR.resolve()).lower() != r"d:\gravity"
+                if is_external:
+                    unconfigured_names.extend(["yaswanth asapu", "yaswanth"])
+                if str(name).strip().lower() in unconfigured_names:
                     return False
                 return True
         except Exception:

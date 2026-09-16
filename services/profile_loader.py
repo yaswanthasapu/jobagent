@@ -54,32 +54,32 @@ class ProfileLoader:
         # Safeguard: Purge any legacy leaked developer defaults (from package <= 1.0.25)
         # on external user machines so other users never see developer details.
         is_installed = "site-packages" in str(settings.BASE_DIR).lower() or "dist-packages" in str(settings.BASE_DIR).lower()
-        is_external_user = is_installed or (Path.home() / ".jobagent") in self.profile_path.parents
+        is_external_user = is_installed or (Path.home() / ".jobagent") in self.profile_path.parents or str(settings.BASE_DIR.resolve()).lower() != r"d:\gravity"
         if is_external_user:
-            personal = data.get("personal", {})
-            prof = data.get("professional", {})
-            leaked_detected = False
-
-            if isinstance(personal, dict):
-                if personal.get("email") == "yaswanth901@gmail.com":
-                    personal["email"] = ""
-                    leaked_detected = True
-                if personal.get("phone") == "6281306458":
-                    personal["phone"] = ""
-                    leaked_detected = True
-            if isinstance(prof, dict):
-                if prof.get("current_company") == "Magellanic-Cloud":
-                    prof["current_company"] = ""
-                    leaked_detected = True
-
-            # If user has no configured name and leaked defaults were present, reset file completely
+            personal = data.get("personal", {}) if isinstance(data.get("personal"), dict) else {}
+            prof = data.get("professional", {}) if isinstance(data.get("professional"), dict) else {}
             cand_name = str(data.get("name") or personal.get("full_name") or "").strip()
-            if leaked_detected or not cand_name:
-                if personal.get("email") == "yaswanth901@gmail.com" or personal.get("phone") == "6281306458":
-                    personal["email"] = ""
-                    personal["phone"] = ""
-                if prof.get("current_company") == "Magellanic-Cloud":
-                    prof["current_company"] = ""
+
+            has_leaked_signature = (
+                cand_name.lower() in ["yaswanth asapu", "yaswanth"]
+                or personal.get("email") == "yaswanth901@gmail.com"
+                or personal.get("phone") == "6281306458"
+                or prof.get("current_company") == "Magellanic-Cloud"
+                or data.get("resume_filename") == "Yaswanth_Asapu_QA_Engineer_Selenium_RPA.pdf"
+            )
+
+            if has_leaked_signature:
+                # Completely reset external user's profile to clean unconfigured template
+                template_path = Path(__file__).resolve().parent.parent / "config" / "candidate_profile.template.json"
+                if not template_path.exists():
+                    template_path = Path(__file__).resolve().parent / "config" / "candidate_profile.template.json"
+
+                if template_path.exists():
+                    with open(template_path, "r", encoding="utf-8-sig") as tf:
+                        data = json.load(tf)
+                else:
+                    data = json.loads(CandidateProfile().model_dump_json())
+
                 try:
                     with open(self.profile_path, "w", encoding="utf-8") as f:
                         f.write(json.dumps(data, indent=2))

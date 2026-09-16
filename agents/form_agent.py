@@ -266,25 +266,32 @@ class FormAgent:
                 return field.options[0], False
             return str(days), False
 
-        # 0B. Immediate Joiner / Availability: Candidate has 60 days notice! NEVER answer Yes.
+        # 0B. Immediate Joiner / Availability: Candidate's configured notice period
         if any(phrase in label_lower for phrase in [
             "immediate joiner", "join immediately", "immediate joining",
             "can you join immediately", "available to join immediately",
             "available immediately", "are you an immediate joiner"
         ]):
+            notice_days = profile.professional.notice_period_days
+            is_immediate = (notice_days == 0)
             if field.options:
-                for opt in field.options:
-                    if opt.strip().lower() in ["no", "false"]:
-                        return opt, False
-                for opt in field.options:
-                    if any(k in opt.lower() for k in ["60", "2 months", "standard", "serving notice", "more than 30"]):
-                        return opt, False
-                return field.options[-1], False
+                if is_immediate:
+                    yes_opt = self._find_option_matching(field.options, ["yes", "immediate", "available immediately", "0 days"])
+                    if yes_opt:
+                        return yes_opt, False
+                else:
+                    no_opt = self._find_option_matching(field.options, ["no", "serving notice"])
+                    if no_opt:
+                        return no_opt, False
+                    for opt in field.options:
+                        if any(k in opt.lower() for k in [f"{notice_days}", "standard", "serving notice"]):
+                            return opt, False
+                return field.options[0] if is_immediate else field.options[-1], False
             if field.field_type == FormFieldType.NUMBER or any(k in label_lower for k in ["days", "number", "how many", "decimal"]):
-                return str(profile.professional.notice_period_days), False
-            return "No", False
+                return str(notice_days), False
+            return "Yes" if is_immediate else "No", False
 
-        # 0C. Face-to-Face / In-Person Interviews & Rounds: Candidate is in Hyderabad and always ready to attend
+        # 0C. Face-to-Face / In-Person Interviews & Rounds: Ready to attend interviews
         if any(phrase in label_lower for phrase in [
             "face to face", "f2f", "in-person", "in person", "offline round",
             "offline interview", "walk-in", "walk in", "come for round",
@@ -320,25 +327,22 @@ class FormAgent:
 
         # 1. Demographic & Voluntary EEO Self-Identification (Race, Ethnicity, Gender, Disability, Veteran)
         if any(w in label_lower for w in ["race", "ethnicity", "ethnic origin", "demographic"]):
-            prof_race = getattr(profile.personal, "race_ethnicity", "Asian") or "Asian"
+            prof_race = getattr(profile.personal, "race_ethnicity", None)
             if field.options:
-                if prof_race and prof_race.lower() not in ["i prefer not to specify", "decline"]:
+                if prof_race and prof_race.lower() not in ["i prefer not to specify", "decline", "none", ""]:
                     matched_race = self._find_option_matching(field.options, [prof_race.lower()])
                     if matched_race:
                         return matched_race, False
                 decline_opt = self._find_decline_or_privacy_option(field.options)
                 if decline_opt:
                     return decline_opt, False
-                asian_opt = self._find_option_matching(field.options, ["asian"])
-                if asian_opt:
-                    return asian_opt, False
                 return field.options[-1], False
-            return prof_race, False
+            return prof_race or "", False
 
         if any(w in label_lower for w in ["gender", "sex", "sexual orientation"]) and not any(w in label_lower for w in ["gap", "pay"]):
-            prof_gender = getattr(profile.personal, "gender", "Male") or "Male"
+            prof_gender = getattr(profile.personal, "gender", None)
             if field.options:
-                if prof_gender and prof_gender.lower() not in ["i prefer not to specify", "decline"]:
+                if prof_gender and prof_gender.lower() not in ["i prefer not to specify", "decline", "none", ""]:
                     for opt in field.options:
                         if prof_gender.lower() == opt.lower() or prof_gender.lower() in opt.lower():
                             return opt, False
@@ -346,7 +350,7 @@ class FormAgent:
                 if decline_opt:
                     return decline_opt, False
                 return field.options[-1], False
-            return prof_gender, False
+            return prof_gender or "", False
 
         if "disability" in label_lower or "handicap" in label_lower:
             if field.options:
@@ -438,9 +442,16 @@ class FormAgent:
         )
         if is_location_q:
             if field.options:
-                matched_loc = self._find_option_matching(field.options, ["hyderabad", "telangana", "india"])
-                if matched_loc:
-                    return matched_loc, False
+                loc_terms = []
+                if profile.personal.location:
+                    loc_terms.extend([t.strip().lower() for t in profile.personal.location.split(",") if t.strip()])
+                if hasattr(profile, "preferred_locations") and profile.preferred_locations:
+                    for pl in profile.preferred_locations:
+                        loc_terms.extend([t.strip().lower() for t in pl.split(",") if t.strip()])
+                if loc_terms:
+                    matched_loc = self._find_option_matching(field.options, loc_terms)
+                    if matched_loc:
+                        return matched_loc, False
                 if any(opt.strip().lower() in ["yes", "no"] for opt in field.options):
                     for opt in field.options:
                         if opt.strip().lower() == "yes":
@@ -544,7 +555,7 @@ class FormAgent:
         # Make sure it's not asking for experience with a specific other tool (e.g. "total experience with python")
         if is_total_exp and not re.search(r'(?:with|in)\s+(?!it\b)[a-z]+', label_lower):
             exp = float(profile.professional.total_experience_years)
-            if abs(exp - 3.9) < 0.2:
+            if any(w in combined_text for w in ["whole number", "integer", "round"]):
                 exp = float(round(exp))
             exp_str = str(int(exp)) if exp.is_integer() else str(exp)
             if field.options:
@@ -568,26 +579,30 @@ class FormAgent:
             "notice period", "notice in days", "notice (days)", "notice period in days",
             "notice period (in days)", "how soon can you join"
         ]) or ("notice" in combined_text and any(w in combined_text for w in ["days", "period", "joining", "example"])):
-            days = profile.professional.notice_period_days # 60
+            days = profile.professional.notice_period_days
             if field.options:
                 # Find best matching option
                 for opt in field.options:
                     opt_l = opt.lower()
-                    if str(days) in opt_l or "60 days" in opt_l or "2 months" in opt_l or "8 weeks" in opt_l:
+                    if str(days) in opt_l:
                         return opt, False
-                    if "immediate" in opt_l and days <= 15:
+                    if days == 0 and ("immediate" in opt_l or "0 days" in opt_l or "none" in opt_l):
                         return opt, False
-                    if "1 month" in opt_l and days <= 30:
+                    if 0 < days <= 15 and ("15 days" in opt_l or "2 weeks" in opt_l or "immediate" in opt_l):
                         return opt, False
-                    if "2 months" in opt_l and 31 <= days <= 60:
+                    if 15 < days <= 30 and ("30 days" in opt_l or "1 month" in opt_l or "4 weeks" in opt_l):
+                        return opt, False
+                    if 30 < days <= 60 and ("60 days" in opt_l or "2 months" in opt_l or "8 weeks" in opt_l):
+                        return opt, False
+                    if days > 60 and ("90 days" in opt_l or "3 months" in opt_l or "more than" in opt_l):
                         return opt, False
                 return field.options[0], False
 
             if "week" in combined_text:
-                return str(round(days / 7)), False # "8" or "9"
+                return str(round(days / 7)), False
             if "month" in combined_text:
-                return str(round(days / 30)), False # "2"
-            return str(days), False # "60"
+                return str(round(days / 30)), False
+            return str(days), False
 
         # 8. Yes / No Questions (Dropdown or Radio: experience, skills, tools, availability, background)
         is_yes_no = False

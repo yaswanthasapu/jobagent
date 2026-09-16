@@ -61,12 +61,12 @@ class MemoryService:
 
                     # Purge any legacy developer data if present on external user machines
                     is_installed = "site-packages" in str(settings.BASE_DIR).lower() or "dist-packages" in str(settings.BASE_DIR).lower()
-                    is_external_user = is_installed or (Path.home() / ".jobagent") in self.memory_path.parents
+                    is_external_user = is_installed or (Path.home() / ".jobagent") in self.memory_path.parents or str(settings.BASE_DIR.resolve()).lower() != r"d:\gravity"
                     if is_external_user and "saved_form_answers" in data:
                         cleaned = {}
                         for q_label, ans_obj in data["saved_form_answers"].items():
                             val = str(ans_obj.get("answer", "")) if isinstance(ans_obj, dict) else str(ans_obj)
-                            if val not in ["yaswanth901@gmail.com", "6281306458", "Magellanic-Cloud"]:
+                            if val not in ["yaswanth901@gmail.com", "6281306458", "Magellanic-Cloud", "Yaswanth Asapu", "Yaswanth"]:
                                 cleaned[q_label] = ans_obj
                         data["saved_form_answers"] = cleaned
                     return data

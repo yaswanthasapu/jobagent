@@ -24,7 +24,7 @@ def main():
     import re
     with open("pyproject.toml", "r", encoding="utf-8") as f:
         m = re.search(r'version\s*=\s*"([^"]+)"', f.read())
-        cur_version = m.group(1) if m else "1.0.31"
+        cur_version = m.group(1) if m else "1.0.32"
 
     whl_files = list(dist_dir.glob(f"jobagent-{cur_version}*.whl"))
     tar_files = list(dist_dir.glob(f"jobagent-{cur_version}*.tar.gz"))
