@@ -51,6 +51,41 @@ class ProfileLoader:
         with open(self.profile_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
 
+        # Safeguard: Purge any legacy leaked developer defaults (from package <= 1.0.25)
+        # on external user machines so other users never see developer details.
+        is_installed = "site-packages" in str(settings.BASE_DIR).lower() or "dist-packages" in str(settings.BASE_DIR).lower()
+        is_external_user = is_installed or (Path.home() / ".jobagent") in self.profile_path.parents
+        if is_external_user:
+            personal = data.get("personal", {})
+            prof = data.get("professional", {})
+            leaked_detected = False
+
+            if isinstance(personal, dict):
+                if personal.get("email") == "yaswanth901@gmail.com":
+                    personal["email"] = ""
+                    leaked_detected = True
+                if personal.get("phone") == "6281306458":
+                    personal["phone"] = ""
+                    leaked_detected = True
+            if isinstance(prof, dict):
+                if prof.get("current_company") == "Magellanic-Cloud":
+                    prof["current_company"] = ""
+                    leaked_detected = True
+
+            # If user has no configured name and leaked defaults were present, reset file completely
+            cand_name = str(data.get("name") or personal.get("full_name") or "").strip()
+            if leaked_detected or not cand_name:
+                if personal.get("email") == "yaswanth901@gmail.com" or personal.get("phone") == "6281306458":
+                    personal["email"] = ""
+                    personal["phone"] = ""
+                if prof.get("current_company") == "Magellanic-Cloud":
+                    prof["current_company"] = ""
+                try:
+                    with open(self.profile_path, "w", encoding="utf-8") as f:
+                        f.write(json.dumps(data, indent=2))
+                except Exception:
+                    pass
+
         self._profile = CandidateProfile(**data)
         return self._profile
 

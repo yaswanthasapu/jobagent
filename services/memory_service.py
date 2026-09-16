@@ -58,6 +58,17 @@ class MemoryService:
                     for k, v in default_copy.items():
                         if k not in data:
                             data[k] = v
+
+                    # Purge any legacy developer data if present on external user machines
+                    is_installed = "site-packages" in str(settings.BASE_DIR).lower() or "dist-packages" in str(settings.BASE_DIR).lower()
+                    is_external_user = is_installed or (Path.home() / ".jobagent") in self.memory_path.parents
+                    if is_external_user and "saved_form_answers" in data:
+                        cleaned = {}
+                        for q_label, ans_obj in data["saved_form_answers"].items():
+                            val = str(ans_obj.get("answer", "")) if isinstance(ans_obj, dict) else str(ans_obj)
+                            if val not in ["yaswanth901@gmail.com", "6281306458", "Magellanic-Cloud"]:
+                                cleaned[q_label] = ans_obj
+                        data["saved_form_answers"] = cleaned
                     return data
             except Exception as e:
                 logger.warning(f"Failed to load agent memory ({e}), initializing default.")
