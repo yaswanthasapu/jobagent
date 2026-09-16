@@ -21,25 +21,30 @@ def main():
     ))
 
     dist_dir = Path("dist")
-    whl_files = list(dist_dir.glob("*.whl"))
-    tar_files = list(dist_dir.glob("*.tar.gz"))
+    import re
+    with open("pyproject.toml", "r", encoding="utf-8") as f:
+        m = re.search(r'version\s*=\s*"([^"]+)"', f.read())
+        cur_version = m.group(1) if m else "1.0.31"
+
+    whl_files = list(dist_dir.glob(f"jobagent-{cur_version}*.whl"))
+    tar_files = list(dist_dir.glob(f"jobagent-{cur_version}*.tar.gz"))
 
     if not whl_files or not tar_files:
-        console.print("[yellow]Distribution archives not found in dist/. Building now...[/yellow]")
+        console.print(f"[yellow]Distribution archives for version {cur_version} not found in dist/. Building now...[/yellow]")
         res = subprocess.run([sys.executable, "-m", "build"], capture_output=False)
         if res.returncode != 0:
             console.print("[bold red][ERROR] Package build failed![/bold red]")
             sys.exit(1)
-        whl_files = list(dist_dir.glob("*.whl"))
-        tar_files = list(dist_dir.glob("*.tar.gz"))
+        whl_files = list(dist_dir.glob(f"jobagent-{cur_version}*.whl"))
+        tar_files = list(dist_dir.glob(f"jobagent-{cur_version}*.tar.gz"))
 
-    console.print("\n[bold green][OK] Found Distribution Packages in dist/:[/bold green]")
+    console.print(f"\n[bold green][OK] Found Distribution Packages for version {cur_version} in dist/:[/bold green]")
     for f in whl_files + tar_files:
         console.print(f"  [cyan]•[/cyan] {f.name} ({f.stat().st_size / 1024:.1f} KB)")
 
     # 1. Twine Check
     console.print("\n[dim]Running twine check verification...[/dim]")
-    check_res = subprocess.run([sys.executable, "-m", "twine", "check", "dist/*"], capture_output=True, text=True)
+    check_res = subprocess.run([sys.executable, "-m", "twine", "check", f"dist/jobagent-{cur_version}*"], capture_output=True, text=True)
     if "PASSED" in check_res.stdout:
         console.print("[bold green][OK] Twine metadata and README check passed![/bold green]")
     else:
@@ -79,6 +84,7 @@ def main():
     token = token.strip()
     upload_cmd = [
         sys.executable, "-m", "twine", "upload",
+        "--skip-existing",
         "--username", "__token__",
         "--password", token,
     ]
