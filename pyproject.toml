@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobagent"
-version = "1.0.30"
+version = "1.0.31"
 description = "Autonomous Multi-Platform AI Job Application Agent for LinkedIn and Naukri"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -64,7 +64,7 @@ jobagent = "main:main"
 py-modules = ["main", "apply_jobs"]
 
 [tool.setuptools.packages.find]
-include = ["agents*", "automation*", "config*", "models*", "services*", "ui*"]
+include = ["jobagent*", "agents*", "automation*", "config*", "models*", "services*", "ui*"]
 exclude = ["tests*", ".browser_context*", "screenshots*"]
 
 [tool.setuptools.package-data]

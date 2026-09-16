@@ -299,6 +299,10 @@ def main():
     args = parser.parse_args()
 
     console = Console()
+    from services.preflight import run_preflight_checks
+    if not run_preflight_checks(console):
+        sys.exit(1)
+
     setup_service = SetupService(console)
     memory_service = MemoryService()
 

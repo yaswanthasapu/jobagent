@@ -35,42 +35,67 @@ Equipped with a **Web UI Control Center**, **Interactive Conversational AI Chat*
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 Easy Installation & Quick Start Guide (All PCs)
 
-### Option A: Install from GitHub (Source)
+JobAgent works out-of-the-box on **Windows 10/11**, **macOS (Intel & Apple Silicon M-series)**, and **Linux (Ubuntu/Debian/Fedora/Arch/WSL2)**.
 
+### 🪟 Method 1: Windows (1-Click Automated Setup)
+
+No command prompt knowledge needed.
+1. Download or clone this repository:
+   ```cmd
+   git clone https://github.com/yaswanthasapu/jobagent.git
+   cd jobagent
+   ```
+2. **Double-click `install.bat`** (or run `.\install.bat` in Command Prompt / PowerShell).
+   - *It automatically detects Python, sets up an isolated environment, installs all dependencies, downloads the Playwright Chromium browser, and creates your launcher.*
+3. **To launch JobAgent anytime:** Double-click `run.bat` (or run `run.bat` / `python -m jobagent`).
+
+---
+
+### 🍏 & 🐧 Method 2: macOS & Linux (1-Click Automated Setup)
+
+Handles modern macOS and Linux Python restrictions (PEP 668) automatically.
+1. Download or clone this repository:
+   ```bash
+   git clone https://github.com/yaswanthasapu/jobagent.git
+   cd jobagent
+   ```
+2. Run the automated installer:
+   ```bash
+   chmod +x install.sh run.sh
+   ./install.sh
+   ```
+3. **To launch JobAgent anytime:** Run `jobagent` (from any terminal) or `./run.sh`.
+
+---
+
+### 📦 Method 3: Install via pip / pipx (PyPI)
+
+#### Option A: Recommended (Zero-conflict isolated CLI tool with `pipx`)
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yaswanthasapu/jobagent.git
-cd jobagent
-
-# 2. Create and activate a virtual environment
-# Windows (PowerShell):
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# macOS / Linux:
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Install dependencies & CLI tool
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .
-
-# 4. Install Playwright browser
-playwright install chromium
-
-# 5. Launch the agent
+pipx install jobagent
 jobagent
 ```
 
-### Option B: Install via pip (PyPI)
-
+#### Option B: Standard pip install
 ```bash
 pip install --upgrade jobagent
+
+# Launch using either command:
 jobagent
+# Or if your Python Scripts folder is not in PATH:
+python -m jobagent
 ```
+
+> [!TIP]
+> **Can't find `jobagent` in your terminal?**
+> On some PCs, Windows or Linux doesn't automatically add Python's `Scripts` directory to the system `PATH`.
+> You can **always** start JobAgent on ANY PC using:
+> ```bash
+> python -m jobagent
+> ```
+> (or `py -m jobagent` on Windows / `python3 -m jobagent` on Mac & Linux).
 
 ---
 
