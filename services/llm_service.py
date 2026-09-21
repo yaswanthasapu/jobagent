@@ -45,27 +45,29 @@ class LLMService:
     def _is_gemini(self) -> bool:
         return self.provider == "gemini" or (self.api_key and self.api_key.startswith("AIzaSy"))
 
+    _cached_active_gemini_model: Optional[str] = None
+
     @staticmethod
     def _build_gemini_payload(
         prompt: str,
         json_output: bool,
         temperature: float,
         model_name: str,
-        with_thinking: bool = True
+        with_thinking: bool = False
     ) -> Dict[str, Any]:
         gen_config: Dict[str, Any] = {"temperature": temperature}
         if json_output:
             gen_config["responseMimeType"] = "application/json"
 
-        # Apply thinking config: HIGH for Gemini 3.8/3.7 Flash, dynamic budget for 2.5
+        # Apply low-latency thinking config (MINIMAL for 3.x, 0 budget for 2.5)
         if with_thinking:
             if "3." in model_name or "3-" in model_name:
                 gen_config["thinkingConfig"] = {
-                    "thinkingLevel": "HIGH"
+                    "thinkingLevel": "MINIMAL"
                 }
             elif "2.5" in model_name:
                 gen_config["thinkingConfig"] = {
-                    "thinkingBudget": -1
+                    "thinkingBudget": 0
                 }
 
         return {
@@ -89,14 +91,18 @@ class LLMService:
 
     def _get_gemini_candidate_models(self) -> List[str]:
         models = []
-        if self.model and "gemini" in self.model:
+        # 1. Prioritize previously working model for instant response
+        if LLMService._cached_active_gemini_model:
+            models.append(LLMService._cached_active_gemini_model)
+        if self.model and "gemini" in self.model and self.model not in models:
             models.append(self.model)
         for m in [
-            "gemini-3.1-flash-lite",
-            "gemini-3.7-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
             "gemini-3.5-flash",
             "gemini-3.6-flash",
-            "gemini-3.8-flash"
+            "gemini-2.5-flash",
+            "gemini-3-pro-preview"
         ]:
             if m not in models:
                 models.append(m)
@@ -107,11 +113,10 @@ class LLMService:
         prompt: str,
         json_output: bool = True,
         temperature: float = 0.2,
-        timeout: float = 25.0
+        timeout: float = 7.0
     ) -> str:
         """
-        Calls latest Gemini 3.x models (gemini-3.7-flash, gemini-3.1-flash-lite, gemini-3.5-flash)
-        with automated fast non-thinking first, falling back to thinking if needed.
+        Calls latest Gemini models with fast response, minimal thinking, and instant fallback.
         """
         candidate_models = self._get_gemini_candidate_models()
         last_error = None
@@ -127,9 +132,15 @@ class LLMService:
                         if res.status_code == 200:
                             text = self._extract_gemini_text(res.json())
                             if text:
+                                LLMService._cached_active_gemini_model = model_name
                                 return text
                         elif res.status_code in [400, 404] and not with_thinking:
                             continue
+                        elif res.status_code == 503:
+                            # Model under high demand - immediately pivot to next candidate model
+                            logger.debug(f"Gemini model {model_name} 503 high demand, skipping to next model.")
+                            last_error = Exception(f"Gemini {model_name} error: 503 high demand")
+                            break
                         logger.debug(f"Gemini model {model_name} responded with {res.status_code}, attempting fallback.")
                         last_error = Exception(f"Gemini {model_name} error: {res.status_code} {res.text}")
                         break
@@ -145,10 +156,10 @@ class LLMService:
         prompt: str,
         json_output: bool = True,
         temperature: float = 0.2,
-        timeout: float = 25.0
+        timeout: float = 7.0
     ) -> str:
         """
-        Synchronous call to latest Gemini models with automated fast response and fallback.
+        Synchronous call to latest Gemini models with fast response and instant fallback.
         """
         candidate_models = self._get_gemini_candidate_models()
         last_error = None
@@ -163,9 +174,14 @@ class LLMService:
                         if res.status_code == 200:
                             text = self._extract_gemini_text(res.json())
                             if text:
+                                LLMService._cached_active_gemini_model = model_name
                                 return text
                         elif res.status_code in [400, 404] and not with_thinking:
                             continue
+                        elif res.status_code == 503:
+                            logger.debug(f"Gemini model {model_name} 503 high demand, skipping to next model.")
+                            last_error = Exception(f"Gemini {model_name} error: 503 high demand")
+                            break
                         logger.debug(f"Gemini model {model_name} responded with {res.status_code}, attempting fallback.")
                         last_error = Exception(f"Gemini {model_name} error: {res.status_code}")
                         break
