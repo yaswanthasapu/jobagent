@@ -59,9 +59,13 @@ class LLMService:
         if json_output:
             gen_config["responseMimeType"] = "application/json"
 
-        # Apply low-latency thinking config (MINIMAL for 3.x, 0 budget for 2.5)
+        # Apply low-latency thinking config (LOW for 3.8, MINIMAL for 3.x, 0 budget for 2.5)
         if with_thinking:
-            if "3." in model_name or "3-" in model_name:
+            if "3.8" in model_name:
+                gen_config["thinkingConfig"] = {
+                    "thinkingLevel": "LOW"
+                }
+            elif "3." in model_name or "3-" in model_name:
                 gen_config["thinkingConfig"] = {
                     "thinkingLevel": "MINIMAL"
                 }
@@ -91,16 +95,18 @@ class LLMService:
 
     def _get_gemini_candidate_models(self) -> List[str]:
         models = []
-        # 1. Prioritize previously working model for instant response
-        if LLMService._cached_active_gemini_model:
-            models.append(LLMService._cached_active_gemini_model)
-        if self.model and "gemini" in self.model and self.model not in models:
+        # 1. Prioritize user's configured model first
+        if self.model and "gemini" in self.model:
             models.append(self.model)
+        # 2. Then previously successful model if different
+        if LLMService._cached_active_gemini_model and LLMService._cached_active_gemini_model not in models:
+            models.append(LLMService._cached_active_gemini_model)
+        # 3. Candidate fallbacks in priority order
         for m in [
+            "gemini-3.8-flash",
             "gemini-3.5-flash-lite",
             "gemini-3.6-flash",
             "gemini-3.5-flash",
-            "gemini-3.8-flash",
             "gemini-3.7-flash",
             "gemini-3-pro-preview"
         ]:
@@ -113,7 +119,7 @@ class LLMService:
         prompt: str,
         json_output: bool = True,
         temperature: float = 0.2,
-        timeout: float = 7.0
+        timeout: float = 15.0
     ) -> str:
         """
         Calls latest Gemini models with fast response, minimal thinking, and instant fallback.
@@ -157,7 +163,7 @@ class LLMService:
         prompt: str,
         json_output: bool = True,
         temperature: float = 0.2,
-        timeout: float = 7.0
+        timeout: float = 15.0
     ) -> str:
         """
         Synchronous call to latest Gemini models with fast response and instant fallback.

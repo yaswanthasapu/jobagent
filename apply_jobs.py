@@ -14,7 +14,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from typing import Optional, List
+from typing import Optional, List, Any
 from playwright.async_api import async_playwright
 from rich.console import Console
 from rich.panel import Panel
@@ -68,6 +68,89 @@ async def stop_current_session():
         except Exception:
             pass
         CURRENT_DB_SERVICE = None
+
+def trigger_alert_sound():
+    """Triggers an audible alert beep to grab user attention during HITL."""
+    try:
+        import winsound
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+    except Exception:
+        pass
+    try:
+        sys.stdout.write('\a')
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+async def show_in_browser_alert(page: Any, title: str, message: str):
+    """
+    Brings the browser to the front and injects a prominent floating alert banner
+    into the browser DOM so the user physically sees what input is needed.
+    """
+    trigger_alert_sound()
+    if not page or page.is_closed():
+        return
+    try:
+        await page.bring_to_front()
+    except Exception:
+        pass
+
+    try:
+        safe_title = json.dumps(title)
+        safe_msg = json.dumps(message)
+        js_code = f"""() => {{
+            let banner = document.getElementById('jobagent-hitl-banner');
+            if (!banner) {{
+                banner = document.createElement('div');
+                banner.id = 'jobagent-hitl-banner';
+                banner.style.position = 'fixed';
+                banner.style.top = '16px';
+                banner.style.left = '50%';
+                banner.style.transform = 'translateX(-50%)';
+                banner.style.zIndex = '2147483647';
+                banner.style.backgroundColor = '#0f172a';
+                banner.style.color = '#f8fafc';
+                banner.style.padding = '14px 22px';
+                banner.style.borderRadius = '12px';
+                banner.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6)';
+                banner.style.border = '2px solid #f59e0b';
+                banner.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                banner.style.fontSize = '14px';
+                banner.style.maxWidth = '650px';
+                banner.style.width = '90%';
+                banner.style.pointerEvents = 'auto';
+                banner.style.transition = 'all 0.3s ease-in-out';
+                document.body.appendChild(banner);
+            }}
+            banner.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="font-size: 24px; line-height: 1;">⚠️</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; color: #fbbf24; font-size: 15px; margin-bottom: 4px;">${{ {safe_title} }}</div>
+                        <div style="color: #e2e8f0; line-height: 1.4; font-size: 13px;">${{ {safe_msg} }}</div>
+                    </div>
+                    <button onclick="document.getElementById('jobagent-hitl-banner').style.display='none'" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;">Dismiss</button>
+                </div>
+            `;
+            banner.style.display = 'block';
+        }}"""
+        await page.evaluate(js_code)
+    except Exception as e:
+        logger.debug(f"Failed to inject in-browser alert: {e}")
+
+async def remove_in_browser_alert(page: Any):
+    """Removes the floating alert banner from the browser DOM."""
+    if not page or page.is_closed():
+        return
+    try:
+        await page.evaluate("""() => {
+            const banner = document.getElementById('jobagent-hitl-banner');
+            if (banner) {
+                banner.remove();
+            }
+        }""")
+    except Exception:
+        pass
 
 async def handle_new_field_hitl(
     modal: EasyApplyModal,
@@ -138,6 +221,13 @@ async def handle_new_field_hitl(
         except Exception as e:
             logger.warning(f"Terminal prompt interrupted or failed: {e}")
 
+    # Show visual alert banner in browser and bring to front
+    await show_in_browser_alert(
+        modal.page,
+        f"🔔 Action Required: {clean_label[:40]}",
+        f"JobAgent needs your input for: '{clean_label}'. Please select or type your response in this form or the console."
+    )
+
     # Watch both Web UI response (hitl_future) and browser input
     poll_start = asyncio.get_event_loop().time()
     try:
@@ -169,6 +259,7 @@ async def handle_new_field_hitl(
             await asyncio.sleep(1.0)
     finally:
         HITLManager.clear()
+        await remove_in_browser_alert(modal.page)
 
     if not user_ans and clean_sug:
         console.print(f"[yellow]Timeout reached. Using fallback suggested value: '{clean_sug}'[/yellow]")
@@ -233,6 +324,13 @@ async def wait_for_user_to_resolve_errors(
                 pass
         asyncio.create_task(_read_cli_keypress())
 
+    # Show visual alert banner in browser and bring to front
+    await show_in_browser_alert(
+        modal.page,
+        "⚠️ Action Required: Missing or Invalid Selection Detected",
+        f"Validation Error: {err_text}. Please select or enter the required value directly in this browser window, then click Next."
+    )
+
     # Polling loop: monitor Web UI response, browser state, and CLI
     poll_start = asyncio.get_event_loop().time()
     try:
@@ -287,6 +385,7 @@ async def wait_for_user_to_resolve_errors(
             return not (await modal.has_validation_errors())
     finally:
         HITLManager.clear()
+        await remove_in_browser_alert(modal.page)
 
     return False
 
@@ -574,6 +673,12 @@ async def _process_linkedin_job_card(
                 suggested_value="Apply" if score >= effective_min_score else "Skip",
                 timeout_sec=120
             )
+            # Show visual alert banner in browser and bring to front
+            await show_in_browser_alert(
+                page,
+                f"⚠️ Human Review: {card.title} @ {card.company}",
+                f"Autonomous engine flagged this job for review (Score: {score}%). {notes_text}. Decide whether to Apply or Skip in the console or Web UI."
+            )
             is_cli_interactive = bool(sys.stdin and sys.stdin.isatty())
             review_choice = "skip"
             if is_cli_interactive:
@@ -605,6 +710,7 @@ async def _process_linkedin_job_card(
                         await asyncio.sleep(1.0)
                 finally:
                     HITLManager.clear()
+                    await remove_in_browser_alert(page)
 
             if review_choice != "apply":
                 console.print(f"[yellow]Skipping post per user review decision ({notes_text})[/yellow]")
@@ -615,14 +721,13 @@ async def _process_linkedin_job_card(
                 ))
                 return None
         else:
-            if score < effective_min_score:
-                console.print(f"[yellow]Skipping REVIEW post below minimum score ({score}% < {effective_min_score}%) ({notes_text})[/yellow]")
-                await db_service.record_application(ApplicationRecord(
-                    job_id=card.job_id, job_title=card.title, company=card.company,
-                    location=card.location, job_url=card.job_url, platform="LinkedIn", match_score=score,
-                    status=ApplicationStatus.SKIPPED_LOW_SCORE, notes=notes_text
-                ))
-                return None
+            console.print(f"[yellow]Skipping job flagged for REVIEW in autonomous mode ({notes_text})[/yellow]")
+            await db_service.record_application(ApplicationRecord(
+                job_id=card.job_id, job_title=card.title, company=card.company,
+                location=card.location, job_url=card.job_url, platform="LinkedIn", match_score=score,
+                status=ApplicationStatus.SKIPPED_LOW_SCORE, notes=f"Autonomous SKIP on REVIEW: {notes_text}"
+            ))
+            return None
 
     elif eval_res.decision in (DecisionType.SKIP, DecisionType.REJECT, DecisionType.BLOCKED) or score < effective_min_score:
         console.print(f"[yellow]Skipping post ({notes_text})[/yellow]")
@@ -872,6 +977,12 @@ async def _process_linkedin_job_card(
                 suggested_value="submit",
                 timeout_sec=120
             )
+            # Show visual alert banner in browser and bring to front
+            await show_in_browser_alert(
+                modal.page,
+                f"🚀 Review & Submit: {card.title} @ {card.company}",
+                f"Application is ready for submission! Current CTC: INR {cur_inr:,} | Expected CTC: INR {exp_inr:,} | Notice: {profile.professional.notice_period_days} days. Please approve in console/Web UI or review in browser."
+            )
             is_cli_interactive = bool(sys.stdin and sys.stdin.isatty())
             if is_cli_interactive:
                 try:
@@ -908,6 +1019,7 @@ async def _process_linkedin_job_card(
                         await asyncio.sleep(1.0)
                 finally:
                     HITLManager.clear()
+                    await remove_in_browser_alert(modal.page)
 
         if proceed == "submitted_in_browser":
             console.print("[bold green][OK] Application was submitted directly in browser![/bold green]")

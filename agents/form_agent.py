@@ -468,12 +468,13 @@ class FormAgent:
 
         # Candidate summary, cover note, or about you
         if any(w in label_lower for w in ["summary", "about you", "profile summary", "brief summary", "cover letter", "describe yourself"]):
-            candidate_role = profile.professional.designation or profile.current_role or "QA Automation Engineer"
-            candidate_exp = profile.professional.total_experience_years or profile.experience_years or 4.0
-            candidate_skills = ", ".join(profile.skills[:6]) if profile.skills else "quality assurance and testing"
+            candidate_role = profile.professional.designation or profile.current_role or "Professional"
+            candidate_exp = profile.professional.total_experience_years or profile.experience_years or 0.0
+            candidate_skills = ", ".join(profile.skills[:6]) if profile.skills else "domain excellence and problem solving"
+            exp_str = f"{candidate_exp:g}" if candidate_exp > 0 else "extensive"
             summary_text = (
-                f"Experienced {candidate_role} with {candidate_exp} years of professional experience specializing in {candidate_skills}. "
-                f"Demonstrated track record of delivering robust test automation frameworks, API testing, and continuous integration solutions."
+                f"Accomplished {candidate_role} with {exp_str} years of professional experience specializing in {candidate_skills}. "
+                f"Proven track record of driving high-impact deliverables, cross-functional collaboration, and technical/operational excellence."
             )
             return summary_text, False
 
@@ -592,41 +593,58 @@ class FormAgent:
                 getattr(profile, "graduation_department", None)
                 or getattr(profile, "field_of_study", None)
                 or getattr(profile, "major", None)
-                or (profile.education.graduation_department if hasattr(profile, "education") else None)
-                or "Electronics and Communication Engineering"
+                or (getattr(profile.education, "graduation_department", None) if hasattr(profile, "education") else None)
+                or (getattr(profile.education, "field_of_study", None) if hasattr(profile, "education") else None)
+                or (getattr(profile.education, "major", None) if hasattr(profile, "education") else None)
+                or "Engineering"
             )
             if field.options:
-                matched = self._find_option_matching(field.options, [
-                    "electronics and communication", "electronics & communication", "electronics", "ece", "engineering"
-                ])
+                val_low = val.lower()
+                patterns = [
+                    val_low,
+                    val_low.replace(" and ", " & "),
+                    val_low.replace(" & ", " and ")
+                ]
+                for word in val_low.split():
+                    if len(word) > 3 and word not in ["and", "with", "from", "studies", "department"]:
+                        patterns.append(word)
+                matched = self._find_option_matching(field.options, patterns)
                 if matched:
                     return matched, False
                 return field.options[0], False
             return val, False
 
         # 7B. Dates attended / Graduation year / Start year
+        edu = getattr(profile, "education", None)
+        from_month = getattr(edu, "from_month", None) or "January"
+        from_year = str(getattr(edu, "from_year", None) or 2015)
+        to_month = getattr(edu, "to_month", None) or "February"
+        to_year = str(getattr(edu, "to_year", None) or 2022)
+
         if "dates attended" in label_lower or "attendance date" in label_lower or ("attended" in label_lower and any(w in label_lower for w in ["from", "to", "date", "year"])):
             if "from" in label_lower or "start" in label_lower:
                 if any(w in label_lower for w in ["month", "from*"]):
-                    return "January", False
-                return "2015", False
+                    return from_month, False
+                return from_year, False
             if "to" in label_lower or "end" in label_lower or "graduation" in label_lower:
                 if any(w in label_lower for w in ["month", "to*"]):
-                    return "February", False
-                return "2022", False
-            return "2015", False
+                    return to_month, False
+                return to_year, False
+            return from_year, False
 
         if any(w in label_lower for w in ["graduation year", "year of graduation", "passout year", "year of completion", "year graduated"]):
-            return "2022", False
+            return to_year, False
 
         # 7C. Education / Degree questions (e.g. Bachelor's Degree)
         if any(w in label_lower for w in ["bachelor", "degree", "highest education", "highest level of education", "level of education", "diploma", "b.tech", "btech"]):
+            degree_val = getattr(edu, "degree", None) or "Bachelor's Degree"
             if field.options:
-                for opt in field.options:
-                    if any(w in opt.lower() for w in ["yes", "bachelor", "graduate", "b.tech", "btech"]):
-                        return opt, False
+                deg_patterns = [degree_val.lower(), "bachelor", "graduate", "undergraduate", "b.tech", "btech", "degree"]
+                matched_deg = self._find_option_matching(field.options, deg_patterns)
+                if matched_deg:
+                    return matched_deg, False
                 return field.options[0], False
-            return "Bachelor's Degree", False
+            return degree_val, False
 
         # 8. Notice Period (Days, Weeks, Months)
         if any(phrase in combined_text for phrase in [

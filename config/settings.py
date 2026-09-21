@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # LLM Settings
     LLM_PROVIDER: str = "auto"  # 'auto', 'openai', 'gemini', 'anthropic', or 'heuristic'
-    LLM_MODEL: str = "gemini-3.5-flash-lite"
+    LLM_MODEL: str = "gemini-3.8-flash"
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None

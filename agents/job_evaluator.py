@@ -782,11 +782,19 @@ class JobEvaluator:
             notice_score = 20.0
             reasons.append("60-day notice period accepted")
         elif is_immediate or (req_notice is not None and req_notice <= 15):
-            notice_score = 5.0
-            review_triggers.append("Job specifies immediate joiner (< 15 days), candidate notice is 60 days")
+            if candidate_notice > 30:
+                notice_score = 0.0
+                hard_skip = f"Job requires immediate joiner (< 15 days), but candidate has {candidate_notice}-day notice period"
+            else:
+                notice_score = 5.0
+                review_triggers.append(f"Job specifies immediate joiner (< 15 days), candidate notice is {candidate_notice} days")
         elif is_30_days or (req_notice is not None and req_notice <= 30):
-            notice_score = 12.0
-            review_triggers.append("Job requests 30-day notice period, candidate notice is 60 days")
+            if candidate_notice > 45:
+                notice_score = 8.0
+                review_triggers.append(f"Job requests 30-day notice period, candidate notice is {candidate_notice} days")
+            else:
+                notice_score = 15.0
+                reasons.append(f"Notice period ({candidate_notice} days) acceptable")
         else:
             notice_score = 20.0
             reasons.append(f"Notice period ({candidate_notice} days) standard")

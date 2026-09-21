@@ -327,13 +327,6 @@ class MemoryService:
                 ("experience (years)", total_exp, "number"),
                 ("how many years of experience do you have in total", total_exp, "number"),
                 ("total work experience", total_exp, "number"),
-                ("selenium", total_exp, "number"),
-                ("selenium experience", total_exp, "number"),
-                ("core java", total_exp, "number"),
-                ("core java experience", total_exp, "number"),
-                ("java", total_exp, "number"),
-                ("rest assured", total_exp, "number"),
-                ("restassured", total_exp, "number"),
                 ("current ctc in inr", cur_inr, "number"),
                 ("expected ctc in inr", exp_inr, "number"),
                 ("please enter your current ctc in inr", cur_inr, "number"),
@@ -363,60 +356,130 @@ class MemoryService:
                 ("legally authorized to work", "Yes", "radio"),
                 ("require sponsorship", "No", "radio"),
                 ("18 years of age", "Yes", "radio"),
-                ("product-based companies worked for", "Enterprise Software / SaaS Product Company", "text"),
-                ("product based companies", "Enterprise Software / SaaS Product Company", "text"),
+            ]
+
+            # Dynamically seed education details from candidate profile
+            edu = getattr(profile, "education", None)
+            degree = getattr(edu, "degree", None) or "Bachelor's Degree"
+            major = (
+                getattr(edu, "major", None)
+                or getattr(edu, "field_of_study", None)
+                or getattr(edu, "graduation_department", None)
+                or getattr(profile, "major", None)
+                or getattr(profile, "field_of_study", None)
+                or getattr(profile, "graduation_department", None)
+                or ""
+            )
+            from_year = str(getattr(edu, "from_year", "")) if getattr(edu, "from_year", None) else ""
+            to_year = str(getattr(edu, "to_year", "")) if getattr(edu, "to_year", None) else ""
+
+            if degree:
+                initial_mappings.append(("degree", degree, "text"))
+            if major:
+                initial_mappings.extend([
+                    ("major / field of study", major, "text"),
+                    ("major/field of study", major, "text"),
+                    ("major", major, "text"),
+                    ("field of study", major, "text"),
+                    ("graduation department", major, "text"),
+                    ("department of study", major, "text"),
+                ])
+            if from_year:
+                initial_mappings.append(("dates attended from", from_year, "text"))
+            if to_year:
+                initial_mappings.extend([
+                    ("dates attended to", to_year, "text"),
+                    ("graduation year", to_year, "text"),
+                ])
+
+            # Dynamically seed candidate's primary core skills with full experience
+            primary_indicators = {
+                "selenium", "core java", "java", "testng", "automation testing",
+                "qa automation", "software testing", "functional testing",
+                "rest assured", "restassured",
+                "financial modeling", "accounting", "seo", "sem", "talent acquisition"
+            }
+            cand_role_low = (profile.professional.designation or "").lower()
+            for s in (profile.skills or []):
+                s_clean = str(s).strip().lower()
+                if not s_clean:
+                    continue
+                is_primary = (s_clean in primary_indicators) or (cand_role_low and (s_clean in cand_role_low or cand_role_low in s_clean))
+                if is_primary:
+                    initial_mappings.extend([
+                        (s_clean, total_exp, "number"),
+                        (f"{s_clean} experience", total_exp, "number"),
+                        (f"years of experience in {s_clean}", total_exp, "number"),
+                        (f"how many years of experience do you have in {s_clean}", total_exp, "number"),
+                    ])
+
+            # Dynamically seed target roles and current designation experience
+            target_roles = getattr(profile, "target_roles", None) or getattr(profile, "preferred_roles", None) or []
+            for r in target_roles:
+                r_clean = str(r).strip().lower()
+                if r_clean:
+                    initial_mappings.extend([
+                        (f"years of experience as a {r_clean}", total_exp, "number"),
+                        (f"years of experience as {r_clean}", total_exp, "number"),
+                    ])
+            if profile.professional.designation:
+                desig_clean = profile.professional.designation.strip().lower()
+                initial_mappings.extend([
+                    (f"years of experience as a {desig_clean}", total_exp, "number"),
+                    (f"years of experience as {desig_clean}", total_exp, "number"),
+                ])
+
+            # Dynamically seed company context
+            comp = profile.professional.current_company or "Enterprise Software / SaaS Product Company"
+            comp_product = "Enterprise Software / SaaS Product Company" if any(w in comp.lower() for w in ["magellanic", "cloud", "saas", "tech", "software", "product"]) else comp
+            initial_mappings.extend([
+                ("product-based companies worked for", comp_product, "text"),
+                ("product based companies", comp_product, "text"),
                 ("automation testing for ipaas, saas, or cloud-based platforms", "Yes", "radio"),
                 ("automation testing for ipaas", "Yes", "radio"),
-                ("api testing – postman/swagger/etc", "Advanced", "select"),
-                ("api testing postman/swagger/etc", "Advanced", "select"),
-                ("api testing postman", "Advanced", "select"),
-                ("frameworks worked with", "Selenium", "text"),
+            ])
+
+            # Dynamically seed API Testing & tool proficiency level
+            has_api = any(any(k in s.lower() for k in ["api", "postman", "rest", "swagger"]) for s in (profile.skills or []))
+            api_level = "Advanced" if has_api else "Intermediate"
+            initial_mappings.extend([
+                ("api testing – postman/swagger/etc", api_level, "select"),
+                ("api testing postman/swagger/etc", api_level, "select"),
+                ("api testing postman", api_level, "select"),
                 ("python experience", "Beginner", "select"),
                 ("pyscript experience", "No experience", "select"),
                 ("pyscript", "No experience", "select"),
                 ("backend applications/services hosted on aws", "No experience", "select"),
                 ("hosted on aws", "No experience", "select"),
-                ("major / field of study", "Electronics and Communication Engineering", "text"),
-                ("major/field of study", "Electronics and Communication Engineering", "text"),
-                ("major", "Electronics and Communication Engineering", "text"),
-                ("field of study", "Electronics and Communication Engineering", "text"),
-                ("graduation department", "Electronics and Communication Engineering", "text"),
-                ("department of study", "Electronics and Communication Engineering", "text"),
-                ("degree", "Bachelor's Degree", "text"),
-                ("dates attended from", "2015", "text"),
-                ("dates attended to", "2022", "text"),
-                ("graduation year", "2022", "text"),
-            ]
+            ])
+
+            # Dynamically seed technologies / frameworks from skills
+            has_selenium = any("selenium" in s.lower() for s in (profile.skills or []))
+            fw_val = "Selenium" if has_selenium else (", ".join(profile.skills[:3]) if profile.skills else "Selenium")
+            initial_mappings.extend([
+                ("frameworks worked with", fw_val, "text"),
+                ("technologies worked with", fw_val, "text"),
+            ])
 
             # Dynamically map candidate's excluded skills as 0
             for ex in (profile.excluded_skills or []):
                 ex_clean = str(ex).strip()
                 if not ex_clean:
                     continue
-                if ex_clean.lower() == "python":
-                    # Keep "python experience" mapped to Beginner while setting numerical exp to 0
-                    initial_mappings.append((ex_clean.lower(), "0", "number"))
-                    initial_mappings.append((f"years of experience in {ex_clean.lower()}", "0", "number"))
-                    initial_mappings.append((f"how many years of experience do you have in {ex_clean.lower()}", "0", "number"))
+                ex_low = ex_clean.lower()
+                if ex_low == "python":
+                    initial_mappings.extend([
+                        (ex_low, "0", "number"),
+                        (f"years of experience in {ex_low}", "0", "number"),
+                        (f"how many years of experience do you have in {ex_low}", "0", "number"),
+                    ])
                     continue
-                initial_mappings.append((ex_clean.lower(), "0", "number"))
-                initial_mappings.append((f"{ex_clean.lower()} experience", "0", "number"))
-                initial_mappings.append((f"years of experience in {ex_clean.lower()}", "0", "number"))
-                initial_mappings.append((f"how many years of experience do you have in {ex_clean.lower()}", "0", "number"))
-
-            # Derive frameworks dynamically from candidate skills if Selenium is not present
-            framework_candidates = [
-                s for s in (profile.skills or [])
-                if any(kw in s.lower() for kw in [
-                    'selenium', 'playwright', 'cypress', 'spring', 'react', 'angular',
-                    'vue', 'django', 'fastapi', 'flask', 'express', 'next', 'nest',
-                    'testng', 'cucumber', 'appium', 'robot', 'flutter'
+                initial_mappings.extend([
+                    (ex_low, "0", "number"),
+                    (f"{ex_low} experience", "0", "number"),
+                    (f"years of experience in {ex_low}", "0", "number"),
+                    (f"how many years of experience do you have in {ex_low}", "0", "number"),
                 ])
-            ]
-            has_selenium = any("selenium" in s.lower() for s in (profile.skills or []))
-            if not has_selenium and framework_candidates:
-                frameworks_str = ", ".join(framework_candidates[:4])
-                initial_mappings.append(("frameworks worked with", frameworks_str, "text"))
 
             saved = self._memory.setdefault("saved_form_answers", {})
             changed = False
