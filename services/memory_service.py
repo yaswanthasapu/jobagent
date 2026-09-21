@@ -376,6 +376,16 @@ class MemoryService:
                 ("pyscript", "No experience", "select"),
                 ("backend applications/services hosted on aws", "No experience", "select"),
                 ("hosted on aws", "No experience", "select"),
+                ("major / field of study", "Electronics and Communication Engineering", "text"),
+                ("major/field of study", "Electronics and Communication Engineering", "text"),
+                ("major", "Electronics and Communication Engineering", "text"),
+                ("field of study", "Electronics and Communication Engineering", "text"),
+                ("graduation department", "Electronics and Communication Engineering", "text"),
+                ("department of study", "Electronics and Communication Engineering", "text"),
+                ("degree", "Bachelor's Degree", "text"),
+                ("dates attended from", "2015", "text"),
+                ("dates attended to", "2022", "text"),
+                ("graduation year", "2022", "text"),
             ]
 
             # Dynamically map candidate's excluded skills as 0

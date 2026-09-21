@@ -907,7 +907,9 @@ Return ONLY a strictly valid JSON object with schema:
 
         table.add_row("Current CTC", cur_disp)
         table.add_row("Expected CTC", exp_disp)
-        table.add_row("Notice Period", notice_disp)
+        grad_dept = getattr(profile, "graduation_department", None) or (profile.education.graduation_department if hasattr(profile, "education") else None)
+        if grad_dept:
+            table.add_row("Education / Major", grad_dept)
         table.add_row("Target Roles", ", ".join(profile.preferred_roles) if profile.preferred_roles else "Not configured")
         table.add_row("Core Skills", ", ".join(profile.skills[:8]) + (f" (+{len(profile.skills) - 8} more)" if len(profile.skills) > 8 else "") if profile.skills else "Not configured")
         table.add_row("Target Platforms", ", ".join(prefs.get("preferred_platforms", ["linkedin", "naukri"])))

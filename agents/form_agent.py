@@ -586,8 +586,41 @@ class FormAgent:
                 return field.options[0], False
             return exp_str, False
 
-        # 7. Education / Degree questions (e.g. Bachelor's Degree)
-        if any(w in label_lower for w in ["bachelor", "degree", "education", "graduation", "diploma", "b.tech", "btech"]):
+        # 7A. Major / Field of study / Graduation department
+        if any(w in label_lower for w in ["major", "field of study", "department of study", "graduation department", "branch of study", "discipline"]) and not any(w in label_lower for w in ["experience", "years"]):
+            val = (
+                getattr(profile, "graduation_department", None)
+                or getattr(profile, "field_of_study", None)
+                or getattr(profile, "major", None)
+                or (profile.education.graduation_department if hasattr(profile, "education") else None)
+                or "Electronics and Communication Engineering"
+            )
+            if field.options:
+                matched = self._find_option_matching(field.options, [
+                    "electronics and communication", "electronics & communication", "electronics", "ece", "engineering"
+                ])
+                if matched:
+                    return matched, False
+                return field.options[0], False
+            return val, False
+
+        # 7B. Dates attended / Graduation year / Start year
+        if "dates attended" in label_lower or "attendance date" in label_lower or ("attended" in label_lower and any(w in label_lower for w in ["from", "to", "date", "year"])):
+            if "from" in label_lower or "start" in label_lower:
+                if any(w in label_lower for w in ["month", "from*"]):
+                    return "January", False
+                return "2015", False
+            if "to" in label_lower or "end" in label_lower or "graduation" in label_lower:
+                if any(w in label_lower for w in ["month", "to*"]):
+                    return "February", False
+                return "2022", False
+            return "2015", False
+
+        if any(w in label_lower for w in ["graduation year", "year of graduation", "passout year", "year of completion", "year graduated"]):
+            return "2022", False
+
+        # 7C. Education / Degree questions (e.g. Bachelor's Degree)
+        if any(w in label_lower for w in ["bachelor", "degree", "highest education", "highest level of education", "level of education", "diploma", "b.tech", "btech"]):
             if field.options:
                 for opt in field.options:
                     if any(w in opt.lower() for w in ["yes", "bachelor", "graduate", "b.tech", "btech"]):

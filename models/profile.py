@@ -31,6 +31,17 @@ class WorkExperience(BaseModel):
     skills_used: List[str] = Field(default_factory=list, description="Skills, tools, or methodologies used in this role")
     description: Optional[str] = Field(default="", description="Summary of responsibilities and achievements")
 
+class EducationInfo(BaseModel):
+    degree: str = Field(default="Bachelor's Degree", description="Highest degree obtained")
+    field_of_study: str = Field(default="Electronics and Communication Engineering", description="Major / Field of study")
+    major: str = Field(default="Electronics and Communication Engineering", description="Major specialization")
+    graduation_department: str = Field(default="Electronics and Communication Engineering", description="Graduation department")
+    institution: Optional[str] = Field(default="", description="School or College name")
+    from_month: Optional[str] = Field(default="January", description="Start month")
+    from_year: Optional[int] = Field(default=2015, description="Start year")
+    to_month: Optional[str] = Field(default="February", description="End/Graduation month")
+    to_year: Optional[int] = Field(default=2022, description="Graduation year")
+
 class CandidateProfile(BaseModel):
     # Single Source of Truth root attributes
     name: Optional[str] = None
@@ -39,6 +50,10 @@ class CandidateProfile(BaseModel):
     current_ctc_lpa: Optional[float] = None
     expected_ctc_lpa: Optional[float] = None
     notice_period_days: Optional[int] = None
+    graduation_department: Optional[str] = Field(default="Electronics and Communication Engineering", description="Graduation department")
+    field_of_study: Optional[str] = Field(default="Electronics and Communication Engineering", description="Major / Field of study")
+    major: Optional[str] = Field(default="Electronics and Communication Engineering", description="Major specialization")
+    education: EducationInfo = Field(default_factory=EducationInfo)
 
     # Professional domain & dynamic taxonomy
     detected_department: Optional[str] = Field(default=None, description="Inferred department from resume or skills")

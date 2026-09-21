@@ -657,6 +657,57 @@ async def test_form_agent_summary_and_usd_salary(form_agent: FormAgent, profile:
     assert int(val_usd) > 0
     assert needs_hitl_usd is False
 
+@pytest.mark.asyncio
+async def test_form_agent_graduation_and_field_of_study(form_agent: FormAgent, profile: CandidateProfile):
+    # 1. LinkedIn exact label: "Major / Field of study*"
+    major_field = FormField(
+        field_id="major_field",
+        label="Major / Field of study*",
+        field_type=FormFieldType.TEXT
+    )
+    val_major, needs_hitl_major = await form_agent.resolve_field_value(major_field, profile)
+    assert "Electronics and Communication" in val_major
+    assert needs_hitl_major is False
+
+    # 2. Options dropdown with ECE
+    major_select = FormField(
+        field_id="major_select",
+        label="Field of study",
+        field_type=FormFieldType.SELECT,
+        options=["Computer Science", "Mechanical Engineering", "Electronics and Communication Engineering", "Civil Engineering"]
+    )
+    val_sel, needs_hitl_sel = await form_agent.resolve_field_value(major_select, profile)
+    assert val_sel == "Electronics and Communication Engineering"
+    assert needs_hitl_sel is False
+
+    # 3. Graduation Department
+    dept_field = FormField(
+        field_id="dept_field",
+        label="Graduation department",
+        field_type=FormFieldType.TEXT
+    )
+    val_dept, needs_hitl_dept = await form_agent.resolve_field_value(dept_field, profile)
+    assert "Electronics and Communication" in val_dept
+    assert needs_hitl_dept is False
+
+    # 4. Dates attended: From year and To year
+    dates_from = FormField(
+        field_id="dates_from",
+        label="Dates attended From*",
+        field_type=FormFieldType.TEXT
+    )
+    val_from, _ = await form_agent.resolve_field_value(dates_from, profile)
+    assert val_from == "2015"
+
+    dates_to = FormField(
+        field_id="dates_to",
+        label="Dates attended To*",
+        field_type=FormFieldType.TEXT
+    )
+    val_to, _ = await form_agent.resolve_field_value(dates_to, profile)
+    assert val_to == "2022"
+
+
 
 
 
