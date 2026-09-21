@@ -30,7 +30,7 @@ class LLMService:
 
         # Auto-detect provider if 'auto'
         if self.provider == "auto" and self.api_key:
-            if self.api_key.startswith("AIzaSy") or not self.api_key.startswith("sk-"):
+            if self.api_key.startswith("AIzaSy") or self.api_key.startswith("AQ.") or not self.api_key.startswith("sk-"):
                 self.provider = "gemini"
             else:
                 self.provider = "openai"
@@ -43,7 +43,7 @@ class LLMService:
         return self.can_use_llm()
 
     def _is_gemini(self) -> bool:
-        return self.provider == "gemini" or (self.api_key and self.api_key.startswith("AIzaSy"))
+        return self.provider == "gemini" or (self.api_key and (self.api_key.startswith("AIzaSy") or self.api_key.startswith("AQ.")))
 
     _cached_active_gemini_model: Optional[str] = None
 
@@ -98,10 +98,10 @@ class LLMService:
             models.append(self.model)
         for m in [
             "gemini-3.5-flash-lite",
-            "gemini-3.8-flash",
-            "gemini-3.5-flash",
             "gemini-3.6-flash",
-            "gemini-2.5-flash",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
             "gemini-3-pro-preview"
         ]:
             if m not in models:
@@ -120,6 +120,7 @@ class LLMService:
         """
         candidate_models = self._get_gemini_candidate_models()
         last_error = None
+        req_headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
         async with httpx.AsyncClient(timeout=timeout) as client:
             for model_name in candidate_models:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
@@ -128,7 +129,7 @@ class LLMService:
                 for with_thinking in [False, True]:
                     body = self._build_gemini_payload(prompt, json_output, temperature, model_name, with_thinking=with_thinking)
                     try:
-                        res = await client.post(url, headers={"Content-Type": "application/json"}, json=body)
+                        res = await client.post(url, headers=req_headers, json=body)
                         if res.status_code == 200:
                             text = self._extract_gemini_text(res.json())
                             if text:
@@ -163,6 +164,7 @@ class LLMService:
         """
         candidate_models = self._get_gemini_candidate_models()
         last_error = None
+        req_headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
         with httpx.Client(timeout=timeout) as client:
             for model_name in candidate_models:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
@@ -170,7 +172,7 @@ class LLMService:
                 for with_thinking in [False, True]:
                     body = self._build_gemini_payload(prompt, json_output, temperature, model_name, with_thinking=with_thinking)
                     try:
-                        res = client.post(url, headers={"Content-Type": "application/json"}, json=body)
+                        res = client.post(url, headers=req_headers, json=body)
                         if res.status_code == 200:
                             text = self._extract_gemini_text(res.json())
                             if text:

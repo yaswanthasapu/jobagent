@@ -636,5 +636,27 @@ async def test_form_agent_memory_numeric_guard(form_agent: FormAgent, profile: C
     assert val != "Yes"
     assert float(val) > 0.0
 
+@pytest.mark.asyncio
+async def test_form_agent_summary_and_usd_salary(form_agent: FormAgent, profile: CandidateProfile):
+    summary_field = FormField(
+        field_id="summary_field",
+        label="Summary",
+        field_type=FormFieldType.TEXT
+    )
+    val_sum, needs_hitl_sum = await form_agent.resolve_field_value(summary_field, profile)
+    assert val_sum and len(val_sum) > 20
+    assert needs_hitl_sum is False
+
+    usd_salary_field = FormField(
+        field_id="salary_usd",
+        label="What is your desired salary for this job (USD)?",
+        field_type=FormFieldType.TEXT
+    )
+    val_usd, needs_hitl_usd = await form_agent.resolve_field_value(usd_salary_field, profile)
+    assert val_usd
+    assert int(val_usd) > 0
+    assert needs_hitl_usd is False
+
+
 
 

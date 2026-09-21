@@ -466,13 +466,34 @@ class FormAgent:
         if "current job title" in label_lower or "designation" in label_lower:
             return profile.professional.designation, False
 
-        # 4. CTC & Compensation (Handles INR raw numbers, LPA/Lakhs, and salary expectations)
+        # Candidate summary, cover note, or about you
+        if any(w in label_lower for w in ["summary", "about you", "profile summary", "brief summary", "cover letter", "describe yourself"]):
+            candidate_role = profile.professional.designation or profile.current_role or "QA Automation Engineer"
+            candidate_exp = profile.professional.total_experience_years or profile.experience_years or 4.0
+            candidate_skills = ", ".join(profile.skills[:6]) if profile.skills else "quality assurance and testing"
+            summary_text = (
+                f"Experienced {candidate_role} with {candidate_exp} years of professional experience specializing in {candidate_skills}. "
+                f"Demonstrated track record of delivering robust test automation frameworks, API testing, and continuous integration solutions."
+            )
+            return summary_text, False
+
+        # 4. CTC & Compensation (Handles INR raw numbers, LPA/Lakhs, USD conversion, and salary expectations)
         if any(phrase in combined_text for phrase in [
             "expected ctc", "expected salary", "salary expectations", "expected compensation",
-            "expected annual compensation", "desired compensation", "salary expectation"
+            "expected annual compensation", "desired compensation", "desired salary", "salary expectation"
         ]):
             exp_lpa = profile.professional.expected_lpa
             exp_inr = int(exp_lpa * 100000)
+
+            # USD / Foreign currency conversion (approx 86 INR/USD)
+            if any(w in combined_text for w in ["usd", "$", "dollar", "dollars"]):
+                exp_usd = int(exp_inr / 86)
+                if any(w in combined_text for w in ["month", "monthly"]):
+                    return str(int(round(exp_usd / 12 / 50) * 50)), False
+                if any(w in combined_text for w in ["hour", "hourly"]):
+                    return str(int(round(exp_usd / 2000))), False
+                return str(int(round(exp_usd / 1000) * 1000)), False
+
             if "month" in combined_text:
                 return str(int(exp_inr / 12)), False
 
